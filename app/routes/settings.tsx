@@ -17,7 +17,7 @@ import { db } from "~/db";
 import { eq } from "drizzle-orm";
 import { formatPrice } from "~/lib/utils";
 import {
-  listRefundRequestsForLearner,
+  listRefundRequestsForStudent,
   withdrawRefundRequest,
 } from "~/lib/refund-requests.server";
 
@@ -59,7 +59,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     throw data("User not found.", { status: 404 });
   }
 
-  const refundRequests = listRefundRequestsForLearner(currentUserId);
+  const refundRequests = listRefundRequestsForStudent(currentUserId);
 
   return {
     user: {

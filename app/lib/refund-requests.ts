@@ -57,12 +57,12 @@ export function checkRefundEligibility(
   if (facts.hasOpenRefundRequest) {
     return {
       eligible: false,
-      message: "You already have a open refund request for this purchase.",
+      message: "You already have an open refund request for this purchase.",
     };
   }
 
   // A seat that came out of a team licence, and has been claimed, belongs to
-  // the team — the learner cannot hand it back on their own.
+  // the team — the student cannot hand it back on their own.
   if (facts.hasClaimedSeat) {
     return {
       eligible: false,
@@ -109,8 +109,8 @@ export function checkRefundEligibility(
 
 export type RefundRequestEmailInput = {
   status: RefundRequestStatus;
-  learnerName: string;
-  learnerEmail: string;
+  studentName: string;
+  studentEmail: string;
   courseTitle: string;
   refundableAmount: number;
   decisionNote: string | null;
@@ -124,7 +124,7 @@ const SUBJECT_STATUS: Record<RefundRequestStatus, string> = {
 };
 
 /**
- * The email a learner gets each time their refund request changes status.
+ * The email a student gets each time their refund request changes status.
  * There is no mail transport wired up yet, so callers log the result.
  */
 export function buildRefundRequestEmail(input: RefundRequestEmailInput) {
@@ -156,10 +156,10 @@ export function buildRefundRequestEmail(input: RefundRequestEmailInput) {
   }
 
   return {
-    to: input.learnerEmail,
+    to: input.studentEmail,
     subject: `Refund request ${SUBJECT_STATUS[input.status]} — ${input.courseTitle}`,
     body: [
-      `Hi ${input.learnerName},`,
+      `Hi ${input.studentName},`,
       "",
       ...body,
       "",

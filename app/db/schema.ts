@@ -32,7 +32,7 @@ export enum QuestionType {
 }
 
 // See GLOSSARY.md: a refund request is open until a reviewer approves or
-// declines it, or the learner withdraws it.
+// declines it, or the student withdraws it.
 export enum RefundRequestStatus {
   Open = "open",
   Approved = "approved",
@@ -243,7 +243,7 @@ export const refundRequests = sqliteTable(
       .notNull()
       .$type<RefundRequestStatus>()
       .default(RefundRequestStatus.Open),
-    // The learner's own words, in the box on the course page.
+    // The student's own words, in the box on the course page.
     reason: text("reason").notNull(),
     // Set when a reviewer approves — the refund that went back to the card.
     amountRefunded: integer("amount_refunded"),
@@ -255,7 +255,7 @@ export const refundRequests = sqliteTable(
     decidedByUserId: integer("decided_by_user_id").references(() => users.id),
     // The reviewer's explanation. Required on decline, optional on approve.
     decisionNote: text("decision_note"),
-    // Set only when the learner withdraws a open refund request.
+    // Set only when the student withdraws an open refund request.
     withdrawnAt: text("withdrawn_at"),
   },
   (table) => [index("refund_requests_purchase_idx").on(table.purchaseId)]

@@ -98,8 +98,8 @@ describe("checkRefundEligibility", () => {
 
 describe("buildRefundRequestEmail", () => {
   const base = {
-    learnerName: "Sophia",
-    learnerEmail: "sophia@example.com",
+    studentName: "Sophia",
+    studentEmail: "sophia@example.com",
     courseTitle: "Intro to TypeScript",
     refundableAmount: 2500,
     decisionNote: null,
@@ -123,7 +123,7 @@ describe("buildRefundRequestEmail", () => {
     expect(email.body).toContain("$25.00");
   });
 
-  it("tells the learner their refund is pending once approved", () => {
+  it("tells the student their refund is pending once approved", () => {
     const email = buildRefundRequestEmail({
       ...base,
       status: RefundRequestStatus.Approved,

@@ -106,7 +106,7 @@ function hasClaimedSeat(purchaseId: number) {
 }
 
 /**
- * Refund eligibility for the learner's latest purchase of a course, or null
+ * Refund eligibility for the student's latest purchase of a course, or null
  * when they have not bought it.
  */
 export function getRefundEligibility(userId: number, courseId: number) {
@@ -155,9 +155,9 @@ const refundRequestColumns = {
   refundableAmount: purchases.amountPaid,
   courseTitle: courses.title,
   courseSlug: courses.slug,
-  learnerId: users.id,
-  learnerName: users.name,
-  learnerEmail: users.email,
+  studentId: users.id,
+  studentName: users.name,
+  studentEmail: users.email,
 };
 
 function selectRefundRequests() {
@@ -169,9 +169,9 @@ function selectRefundRequests() {
     .innerJoin(users, eq(purchases.userId, users.id));
 }
 
-export function listRefundRequestsForLearner(learnerId: number) {
+export function listRefundRequestsForStudent(studentId: number) {
   return selectRefundRequests()
-    .where(eq(purchases.userId, learnerId))
+    .where(eq(purchases.userId, studentId))
     .orderBy(desc(refundRequests.requestedAt))
     .all();
 }
@@ -208,8 +208,8 @@ export function sendRefundRequestEmail(refundRequestId: number) {
 
   const email = buildRefundRequestEmail({
     status: request.status,
-    learnerName: request.learnerName,
-    learnerEmail: request.learnerEmail,
+    studentName: request.studentName,
+    studentEmail: request.studentEmail,
     courseTitle: request.courseTitle,
     refundableAmount: request.refundableAmount,
     decisionNote: request.decisionNote,
@@ -237,14 +237,14 @@ function requireOpenRefundRequest(refundRequestId: number) {
   return row;
 }
 
-/** The learner closes their own open refund request. No refund is made. */
+/** The student closes their own open refund request. No refund is made. */
 export function withdrawRefundRequest(
-  learnerId: number,
+  studentId: number,
   refundRequestId: number
 ) {
   const { purchase } = requireOpenRefundRequest(refundRequestId);
 
-  if (purchase.userId !== learnerId) {
+  if (purchase.userId !== studentId) {
     throw data("Refund request not found.", { status: 404 });
   }
 
@@ -260,7 +260,7 @@ export function withdrawRefundRequest(
 }
 
 /**
- * A reviewer approves a open refund request. The refund is the amount
+ * A reviewer approves an open refund request. The refund is the amount
  * paid, and the purchase becomes a refunded purchase: its enrollment is
  * removed, so it no longer grants access to the course.
  */
@@ -296,7 +296,7 @@ export function approveRefundRequest(
   sendRefundRequestEmail(refundRequestId);
 }
 
-/** A reviewer declines a open refund request, with a decision note. */
+/** A reviewer declines an open refund request, with a decision note. */
 export function declineRefundRequest(
   reviewerId: number,
   refundRequestId: number,

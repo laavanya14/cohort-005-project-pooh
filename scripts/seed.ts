@@ -2281,7 +2281,7 @@ This course is still in draft while the cluster examples are rewritten against t
   console.log(`Created ${countRows(schema.purchases)} individual purchases.`);
 
   // ─── Refund requests ───
-  // One of each status a learner can see on their settings page, except
+  // One of each status a student can see on their settings page, except
   // approved — approving removes the enrollment, which the data above assumes.
 
   function individualPurchase(userId: number, courseId: number) {

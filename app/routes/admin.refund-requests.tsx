@@ -117,7 +117,7 @@ export default function AdminRefundRequests({
         <h1 className="text-3xl font-bold">Refund Requests</h1>
         <p className="mt-1 text-muted-foreground">
           Approving a refund request refunds the amount paid and ends the
-          learner's access to the course. Declining needs a decision note.
+          student's access to the course. Declining needs a decision note.
         </p>
       </div>
 
@@ -146,7 +146,7 @@ export default function AdminRefundRequests({
                 className="rounded-md border p-3 text-sm text-muted-foreground"
               >
                 <span className="font-medium text-foreground">
-                  {request.learnerName}
+                  {request.studentName}
                 </span>{" "}
                 · {request.courseTitle} · {formatPrice(request.refundableAmount)}{" "}
                 · <span className="capitalize">{request.status}</span>
@@ -179,9 +179,9 @@ function OpenRefundRequest({ request }: { request: RefundRequestRow }) {
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="font-medium">
-              {request.learnerName}{" "}
+              {request.studentName}{" "}
               <span className="font-normal text-muted-foreground">
-                ({request.learnerEmail})
+                ({request.studentEmail})
               </span>
             </p>
             <Link
