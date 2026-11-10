@@ -10,24 +10,28 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Textarea } from "~/components/ui/textarea";
-import {
-  UserRole,
-  RefundStatus,
-  users,
-  courses,
-  purchases,
-  refunds,
-} from "~/db/schema";
+import { UserRole, users, RefundRequestStatus } from "~/db/schema";
 import { AlertTriangle } from "lucide-react";
 import { data, isRouteErrorResponse, Link } from "react-router";
 import { db } from "~/db";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { formatPrice } from "~/lib/utils";
+import {
+  listRefundRequestsForLearner,
+  withdrawRefundRequest,
+} from "~/lib/refund-requests.server";
 
-const settingsSchema = z.object({
-  name: z.string().trim().min(1, "Name cannot be empty."),
-  bio: z.string().trim().optional(),
-});
+const settingsSchema = z.discriminatedUnion("intent", [
+  z.object({
+    intent: z.literal("update-profile"),
+    name: z.string().trim().min(1, "Name cannot be empty."),
+    bio: z.string().trim().optional(),
+  }),
+  z.object({
+    intent: z.literal("withdraw-refund-request"),
+    refundRequestId: z.coerce.number().int(),
+  }),
+]);
 
 export function meta() {
   return [
@@ -55,25 +59,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     throw data("User not found.", { status: 404 });
   }
 
-  const pendingChargebacks = db
-    .select({
-      id: refunds.id,
-      courseTitle: courses.title,
-      courseSlug: courses.slug,
-      amountPaid: purchases.amountPaid,
-      reason: refunds.reason,
-      requestedAt: refunds.requestedAt,
-    })
-    .from(refunds)
-    .innerJoin(purchases, eq(refunds.purchaseId, purchases.id))
-    .innerJoin(courses, eq(purchases.courseId, courses.id))
-    .where(
-      and(
-        eq(purchases.userId, currentUserId),
-        eq(refunds.status, RefundStatus.Requested)
-      )
-    )
-    .all();
+  const refundRequests = listRefundRequestsForLearner(currentUserId);
 
   return {
     user: {
@@ -83,7 +69,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       bio: currentUser.bio,
       role: currentUser.role,
     },
-    pendingChargebacks,
+    refundRequests,
   };
 }
 
@@ -110,6 +96,11 @@ export async function action({ request }: Route.ActionArgs) {
     return data({ errors: parsed.errors }, { status: 400 });
   }
 
+  if (parsed.data.intent === "withdraw-refund-request") {
+    withdrawRefundRequest(currentUser.id, parsed.data.refundRequestId);
+    return { withdrawn: true };
+  }
+
   const { name, bio } = parsed.data;
 
   db
@@ -122,7 +113,7 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function Settings({ loaderData }: Route.ComponentProps) {
-  const { user, pendingChargebacks } = loaderData;
+  const { user, refundRequests } = loaderData;
   const fetcher = useFetcher();
   const nameInputRef = useRef<HTMLInputElement>(null);
 
@@ -160,6 +151,7 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
         </CardHeader>
         <CardContent>
           <fetcher.Form method="post" className="space-y-4">
+            <input type="hidden" name="intent" value="update-profile" />
             <div className="space-y-2">
               <Label htmlFor="name">Name</Label>
               <Input
@@ -209,39 +201,101 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
         </CardContent>
       </Card>
 
-      {pendingChargebacks.length > 0 && (
+      {refundRequests.length > 0 && (
         <Card className="mt-8 max-w-md">
           <CardHeader>
-            <h2 className="text-lg font-semibold">Pending Chargeback</h2>
-            <p className="text-sm text-muted-foreground">
-              {pendingChargebacks.length === 1
-                ? "One chargeback is waiting on us."
-                : `${pendingChargebacks.length} chargebacks are waiting on us.`}
-            </p>
+            <h2 className="text-lg font-semibold">Refund requests</h2>
+            {refundRequests.some(
+              (request) => request.status === RefundRequestStatus.Open
+            ) && (
+              <p className="text-sm text-muted-foreground">
+                We'll email you when we've decided.
+              </p>
+            )}
           </CardHeader>
           <CardContent className="space-y-4">
-            {pendingChargebacks.map((chargeback) => (
-              <div key={chargeback.id} className="rounded-md border p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <Link
-                    to={`/courses/${chargeback.courseSlug}`}
-                    className="font-medium hover:underline"
-                  >
-                    {chargeback.courseTitle}
-                  </Link>
-                  <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
-                    Pending Chargeback
-                  </span>
-                </div>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {formatPrice(chargeback.amountPaid)} · raised{" "}
-                  {new Date(chargeback.requestedAt).toLocaleDateString()}
-                </p>
-                <p className="mt-2 text-sm">{chargeback.reason}</p>
-              </div>
+            {refundRequests.map((request) => (
+              <RefundRequestRow key={request.id} request={request} />
             ))}
           </CardContent>
         </Card>
+      )}
+    </div>
+  );
+}
+
+const STATUS_BADGE: Record<RefundRequestStatus, { label: string; className: string }> = {
+  [RefundRequestStatus.Open]: {
+    label: "Open",
+    className:
+      "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+  },
+  [RefundRequestStatus.Approved]: {
+    label: "Approved",
+    className:
+      "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+  },
+  [RefundRequestStatus.Declined]: {
+    label: "Declined",
+    className: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
+  },
+  [RefundRequestStatus.Withdrawn]: {
+    label: "Withdrawn",
+    className: "bg-muted text-muted-foreground",
+  },
+};
+
+type RefundRequestRowData = Route.ComponentProps["loaderData"]["refundRequests"][number];
+
+function RefundRequestRow({ request }: { request: RefundRequestRowData }) {
+  const fetcher = useFetcher();
+  const badge = STATUS_BADGE[request.status];
+  const isWithdrawing = fetcher.state !== "idle";
+
+  return (
+    <div className="rounded-md border p-3">
+      <div className="flex items-start justify-between gap-3">
+        <Link
+          to={`/courses/${request.courseSlug}`}
+          className="font-medium hover:underline"
+        >
+          {request.courseTitle}
+        </Link>
+        <span
+          className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${badge.className}`}
+        >
+          {badge.label}
+        </span>
+      </div>
+      <p className="mt-1 text-sm text-muted-foreground">
+        {formatPrice(request.refundableAmount)} · requested{" "}
+        {new Date(request.requestedAt).toLocaleDateString()}
+      </p>
+      {request.status === RefundRequestStatus.Approved && (
+        <p className="mt-2 text-sm font-medium">
+          Your refund of {formatPrice(request.refundableAmount)} is pending.
+        </p>
+      )}
+      <p className="mt-2 text-sm">{request.reason}</p>
+      {request.decisionNote && (
+        <p className="mt-2 text-sm text-muted-foreground">
+          <span className="font-medium text-foreground">Reviewer's note:</span>{" "}
+          {request.decisionNote}
+        </p>
+      )}
+      {request.status === RefundRequestStatus.Open && (
+        <fetcher.Form method="post" className="mt-3">
+          <input type="hidden" name="intent" value="withdraw-refund-request" />
+          <input type="hidden" name="refundRequestId" value={request.id} />
+          <Button
+            type="submit"
+            variant="outline"
+            size="sm"
+            disabled={isWithdrawing}
+          >
+            {isWithdrawing ? "Withdrawing..." : "Withdraw"}
+          </Button>
+        </fetcher.Form>
       )}
     </div>
   );

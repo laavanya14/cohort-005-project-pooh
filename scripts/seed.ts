@@ -1,5 +1,5 @@
 import Database from "better-sqlite3";
-import { eq, gte, isNotNull, isNull, sql, type SQL } from "drizzle-orm";
+import { and, eq, gte, isNotNull, isNull, sql, type SQL } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import type { SQLiteTable } from "drizzle-orm/sqlite-core";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
@@ -11,6 +11,7 @@ import {
   CourseStatus,
   LessonProgressStatus,
   QuestionType,
+  RefundRequestStatus,
   TeamMemberRole,
 } from "../app/db/schema";
 
@@ -76,6 +77,7 @@ async function seed() {
     DROP TABLE IF EXISTS coupons;
     DROP TABLE IF EXISTS team_members;
     DROP TABLE IF EXISTS teams;
+    DROP TABLE IF EXISTS refund_requests;
     DROP TABLE IF EXISTS refunds;
     DROP TABLE IF EXISTS purchases;
     DROP TABLE IF EXISTS enrollments;
@@ -2278,6 +2280,57 @@ This course is still in draft while the cluster examples are rewritten against t
 
   console.log(`Created ${countRows(schema.purchases)} individual purchases.`);
 
+  // ─── Refund requests ───
+  // One of each status a learner can see on their settings page, except
+  // approved — approving removes the enrollment, which the data above assumes.
+
+  function individualPurchase(userId: number, courseId: number) {
+    const purchase = db
+      .select()
+      .from(schema.purchases)
+      .where(
+        and(
+          eq(schema.purchases.userId, userId),
+          eq(schema.purchases.courseId, courseId)
+        )
+      )
+      .get();
+    if (!purchase) throw new Error(`No purchase for ${userId}/${courseId}`);
+    return purchase;
+  }
+
+  db.insert(schema.refundRequests)
+    .values([
+      {
+        // Sophia asked three days after buying; nobody has decided yet.
+        purchaseId: individualPurchase(students[4].id, course1.id).id,
+        status: RefundRequestStatus.Open,
+        reason:
+          "The pace is much faster than I expected and I'm not getting much out of it yet.",
+        requestedAt: daysAgo(12),
+      },
+      {
+        purchaseId: individualPurchase(students[0].id, course2.id).id,
+        status: RefundRequestStatus.Declined,
+        reason: "I bought this by mistake — I meant to buy a different course.",
+        requestedAt: daysAgo(30),
+        decidedAt: daysAgo(29),
+        decidedByUserId: admin.id,
+        decisionNote:
+          "This request came in after the 14-day refund window had closed.",
+      },
+      {
+        purchaseId: individualPurchase(students[1].id, course1.id).id,
+        status: RefundRequestStatus.Withdrawn,
+        reason: "The videos keep buffering for me.",
+        requestedAt: daysAgo(40),
+        withdrawnAt: daysAgo(39),
+      },
+    ])
+    .run();
+
+  console.log(`Created ${countRows(schema.refundRequests)} refund requests.`);
+
   // ─── Teams, Team Members, and Coupons ───
   // Bossy McBossface bought 5 team seats for course 2; Olivia and Liam redeemed coupons
 
@@ -2773,6 +2826,9 @@ This course is still in draft while the cluster examples are rewritten against t
   );
   console.log(
     `  Purchases: ${countRows(schema.purchases)} (${countRows(schema.purchases, gte(schema.purchases.createdAt, sevenDaysAgo))} in the last 7 days), spanning ${historyDays} days`
+  );
+  console.log(
+    `  Refund requests: ${countRows(schema.refundRequests)} (${countRows(schema.refundRequests, eq(schema.refundRequests.status, RefundRequestStatus.Open))} open)`
   );
   console.log(
     `  Teams: ${countRows(schema.teams)}, coupons: ${countRows(schema.coupons)} (${countRows(schema.coupons, isNotNull(schema.coupons.redeemedByUserId))} redeemed)`

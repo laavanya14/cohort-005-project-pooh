@@ -16,18 +16,18 @@ The 14 days after a purchase during which a refund request can be made.
 _Avoid_: Cancel window, cooling-off period
 
 **Refund eligibility**:
-Whether a purchase can have a refund request made: inside the refund window, under 2 hours watched, under 50% of lessons completed, and not a claimed team seat. Checked at the moment the request is made, identically on the course page and the server. A learner who withdraws a request may make a new one only if the purchase is still eligible.
+Whether a purchase can have a refund request made: inside the refund window, under 2 hours watched, under 50% of lessons completed, and not a claimed team seat — and it is not already a refunded purchase or waiting on an open refund request. Checked at the moment the request is made, identically on the course page and the server. A learner who withdraws a request may make a new one only if the purchase is still eligible.
 
 **Refund request**:
-A learner's ask to have the amount paid for a purchase given back. It is pending until a reviewer approves or declines it, or the learner withdraws it.
+A learner's ask to have the amount paid for a purchase given back. It is open until a reviewer approves or declines it, or the learner withdraws it.
 _Avoid_: Reversal, cancellation, chargeback, refund (on its own)
 
 **Reason**:
 The learner's own explanation on a refund request.
 
-**Pending**:
-The status of a refund request that has been neither decided nor withdrawn.
-_Avoid_: Requested, open, pending refund, pending chargeback
+**Open**:
+The status of a refund request the team hasn't decided yet, and the learner hasn't withdrawn. A request a reviewer has looked at but not decided is still open.
+_Avoid_: Pending (that word belongs to refunds), requested
 
 **Approved**:
 The status of a refund request a reviewer has accepted. Only an approved refund request produces a refund.
@@ -37,7 +37,7 @@ The status of a refund request a reviewer has turned down. It always carries a d
 _Avoid_: Rejected, denied
 
 **Withdrawn**:
-The status of a refund request the learner closed themselves while it was pending. It produces no refund.
+The status of a refund request the learner closed themselves while it was open. It produces no refund.
 _Avoid_: Cancelled
 
 **Reviewer**:
@@ -51,6 +51,10 @@ _Avoid_: Reason (that is the learner's), resolution
 **Refund**:
 The money given back to the learner's card after a refund request is approved. It is always the refundable amount.
 _Avoid_: Reversal, chargeback
+
+**Pending refund**:
+A refund that has been issued but hasn't reached the learner's card yet. No payment system is connected, so the app never learns when a refund arrives: every refund is shown as pending.
+_Avoid_: Pending refund request (a refund request is open, never pending), on its way
 
 **Refundable amount**:
 How much a refund for a purchase would be: always the amount paid.
