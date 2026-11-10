@@ -57,7 +57,7 @@ export type Access = {
   isAdmin: boolean;
   /** The instructor who owns this specific course. */
   isOwningInstructor: boolean;
-  /** Owning instructor or admin — the people who speak for the course. */
+  /** Owning instructor or platform admin — the people who speak for the course. */
   isStaff: boolean;
   enrolled: boolean;
   pppBlocked: boolean;

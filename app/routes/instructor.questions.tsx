@@ -364,7 +364,7 @@ export default function InstructorQuestions({
         <h1 className="text-3xl font-bold">Unanswered Questions</h1>
         <p className="mt-1 text-muted-foreground">
           {isAdmin
-            ? "Questions across every course that no instructor or admin has replied to yet."
+            ? "Questions across every course that no instructor or platform admin has replied to yet."
             : "Questions on your courses that you haven't replied to yet."}{" "}
           Replying here marks them answered.
         </p>

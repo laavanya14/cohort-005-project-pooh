@@ -9,7 +9,12 @@ import { db } from "~/db";
 import { UserRole, users } from "~/db/schema";
 import { getCurrentUserId } from "~/lib/session";
 import { parseFormData } from "~/lib/validation";
-import { formatPrice } from "~/lib/utils";
+import { cn, formatDuration, formatPrice } from "~/lib/utils";
+import {
+  REFUND_COMPLETION_LIMIT,
+  REFUND_WATCH_LIMIT_SECONDS,
+  type CourseProgress,
+} from "~/lib/refund-requests";
 import {
   approveRefundRequest,
   declineRefundRequest,
@@ -54,7 +59,9 @@ async function requireReviewer(request: Request) {
     .get();
 
   if (!currentUser || currentUser.role !== UserRole.Admin) {
-    throw data("Only admins can review refund requests.", { status: 403 });
+    throw data("Only platform admins can review refund requests.", {
+      status: 403,
+    });
   }
 
   return currentUser;
@@ -202,6 +209,7 @@ function OpenRefundRequest({ request }: { request: RefundRequestRow }) {
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
+        <CourseProgressSummary progress={request.courseProgress} />
         <p className="text-sm">
           <span className="font-medium">Reason:</span> {request.reason}
         </p>
@@ -239,6 +247,52 @@ function OpenRefundRequest({ request }: { request: RefundRequestRow }) {
   );
 }
 
+function formatMinutes(seconds: number) {
+  return formatDuration(Math.floor(seconds / 60), true, false, false);
+}
+
+function formatPercent(share: number) {
+  return `${Math.round(share * 100)}%`;
+}
+
+// Course progress as it is now, not when the request was made — the student
+// keeps access while the request is open. Going over a limit is shown to the
+// reviewer but does not stop them approving.
+function CourseProgressSummary({ progress }: { progress: CourseProgress }) {
+  const overAnyLimit = progress.overWatchLimit || progress.overCompletionLimit;
+
+  return (
+    <div className="rounded-md border p-3 text-sm">
+      <p className="mb-1 font-medium">Course progress</p>
+      <ul className="space-y-0.5">
+        <li className={cn(progress.overWatchLimit && "font-medium text-destructive")}>
+          {formatMinutes(progress.secondsWatched)} watched{" "}
+          <span className="text-muted-foreground">
+            (limit {formatMinutes(REFUND_WATCH_LIMIT_SECONDS)})
+          </span>
+        </li>
+        <li
+          className={cn(
+            progress.overCompletionLimit && "font-medium text-destructive"
+          )}
+        >
+          {progress.completedLessons} of {progress.totalLessons} lessons
+          completed, {formatPercent(progress.completedShare)}{" "}
+          <span className="text-muted-foreground">
+            (limit {formatPercent(REFUND_COMPLETION_LIMIT)})
+          </span>
+        </li>
+      </ul>
+      {overAnyLimit && (
+        <p className="mt-2 flex items-center gap-1.5 text-destructive">
+          <AlertTriangle className="size-4 shrink-0" />
+          Now over a refund limit. You can still approve or decline.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   let title = "Something went wrong";
   let message = "An unexpected error occurred while loading refund requests.";
@@ -255,7 +309,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       message =
         typeof error.data === "string"
           ? error.data
-          : "Only admins can review refund requests.";
+          : "Only platform admins can review refund requests.";
     } else {
       title = `Error ${error.status}`;
       message = typeof error.data === "string" ? error.data : error.statusText;

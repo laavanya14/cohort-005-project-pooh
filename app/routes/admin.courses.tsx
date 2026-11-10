@@ -101,7 +101,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const currentUser = getUserById(currentUserId);
 
   if (!currentUser || currentUser.role !== UserRole.Admin) {
-    throw data("Only admins can access this page.", {
+    throw data("Only platform admins can access this page.", {
       status: 403,
     });
   }
@@ -126,7 +126,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   const currentUser = getUserById(currentUserId);
   if (!currentUser || currentUser.role !== UserRole.Admin) {
-    throw data("Only admins can manage courses.", { status: 403 });
+    throw data("Only platform admins can manage courses.", { status: 403 });
   }
 
   const formData = await request.formData();
@@ -382,7 +382,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       message = typeof error.data === "string" ? error.data : "Please select a user from the DevUI panel.";
     } else if (error.status === 403) {
       title = "Access denied";
-      message = typeof error.data === "string" ? error.data : "Only admins can access this page.";
+      message = typeof error.data === "string" ? error.data : "Only platform admins can access this page.";
     } else {
       title = `Error ${error.status}`;
       message = typeof error.data === "string" ? error.data : error.statusText;
