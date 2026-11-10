@@ -118,7 +118,7 @@ async function seed() {
     .values({
       name: "Alex Rivera",
       email: "alex.rivera@ralph.dev",
-      role: UserRole.Admin,
+      role: UserRole.PlatformAdmin,
       avatarUrl: "https://api.dicebear.com/9.x/avataaars/svg?seed=alex",
       createdAt: daysAgo(120),
     })
@@ -2344,7 +2344,7 @@ This course is still in draft while the cluster examples are rewritten against t
     .values({
       teamId: team1.id,
       userId: bossy.id,
-      role: TeamMemberRole.Admin,
+      role: TeamMemberRole.TeamAdmin,
       createdAt: daysAgo(30),
     })
     .run();
@@ -2684,7 +2684,7 @@ This course is still in draft while the cluster examples are rewritten against t
       .values({
         teamId: team.id,
         userId: teamAdmin.id,
-        role: TeamMemberRole.Admin,
+        role: TeamMemberRole.TeamAdmin,
         createdAt: daysAgo(purchasedDaysAgo),
       })
       .run();
@@ -2803,7 +2803,7 @@ This course is still in draft while the cluster examples are rewritten against t
 
   console.log("\n✓ Seed complete!");
   console.log(
-    `  Users: ${countRows(schema.users)} (${countRows(schema.users, eq(schema.users.role, UserRole.Admin))} admin, ${countRows(schema.users, eq(schema.users.role, UserRole.Instructor))} instructors, ${countRows(schema.users, eq(schema.users.role, UserRole.Student))} students)`
+    `  Users: ${countRows(schema.users)} (${countRows(schema.users, eq(schema.users.role, UserRole.PlatformAdmin))} platform admins, ${countRows(schema.users, eq(schema.users.role, UserRole.Instructor))} instructors, ${countRows(schema.users, eq(schema.users.role, UserRole.Student))} students)`
   );
   console.log(`  Categories: ${countRows(schema.categories)}`);
   console.log(

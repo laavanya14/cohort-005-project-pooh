@@ -54,7 +54,7 @@ function getUnansweredQuestions(instructorId: number | null): QueuedQuestion[] {
         eq(reply.parentId, comments.id),
         isNull(reply.deletedAt),
         or(
-          eq(replyAuthor.role, UserRole.Admin),
+          eq(replyAuthor.role, UserRole.PlatformAdmin),
           eq(reply.userId, courses.instructorId)
         )
       )
@@ -64,7 +64,7 @@ function getUnansweredQuestions(instructorId: number | null): QueuedQuestion[] {
     isNull(comments.parentId),
     isNull(comments.deletedAt),
     // Staff asking their own question shouldn't queue up as work for themselves.
-    ne(author.role, UserRole.Admin),
+    ne(author.role, UserRole.PlatformAdmin),
     ne(comments.userId, courses.instructorId),
     notExists(staffReply),
   ];

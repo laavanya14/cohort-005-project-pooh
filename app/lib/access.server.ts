@@ -94,7 +94,7 @@ export async function getAccess(
   if (!user) return SIGNED_OUT;
 
   const course = getCourseById(courseId);
-  const isAdmin = user.role === UserRole.Admin;
+  const isAdmin = user.role === UserRole.PlatformAdmin;
   const isOwningInstructor = course?.instructorId === userId;
   const isStaff = isAdmin || isOwningInstructor;
   const enrolled = isUserEnrolled(userId, courseId);
@@ -193,10 +193,10 @@ export async function requireInstructorOrAdmin(request: Request) {
 
   if (
     !user ||
-    (user.role !== UserRole.Instructor && user.role !== UserRole.Admin)
+    (user.role !== UserRole.Instructor && user.role !== UserRole.PlatformAdmin)
   ) {
     throw data("Only instructors can access this page.", { status: 403 });
   }
 
-  return { userId, user, isAdmin: user.role === UserRole.Admin };
+  return { userId, user, isAdmin: user.role === UserRole.PlatformAdmin };
 }

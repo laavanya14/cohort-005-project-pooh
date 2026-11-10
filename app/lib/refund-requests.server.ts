@@ -282,7 +282,9 @@ export function withdrawRefundRequest(
 /**
  * A reviewer approves an open refund request. The refund is the amount
  * paid, and the purchase becomes a refunded purchase: its enrollment is
- * removed, so it no longer grants access to the course.
+ * removed, so it no longer grants access to the course. Course progress
+ * is untouched, so a student who buys the course again picks up where
+ * they left off.
  */
 export function approveRefundRequest(
   reviewerId: number,

@@ -58,7 +58,7 @@ async function requireReviewer(request: Request) {
     .where(eq(users.id, currentUserId))
     .get();
 
-  if (!currentUser || currentUser.role !== UserRole.Admin) {
+  if (!currentUser || currentUser.role !== UserRole.PlatformAdmin) {
     throw data("Only platform admins can review refund requests.", {
       status: 403,
     });

@@ -11,7 +11,7 @@ import {
 export enum UserRole {
   Student = "student",
   Instructor = "instructor",
-  Admin = "admin",
+  PlatformAdmin = "platform_admin",
 }
 
 export enum CourseStatus {
@@ -31,8 +31,7 @@ export enum QuestionType {
   TrueFalse = "true_false",
 }
 
-// See GLOSSARY.md: a refund request is open until a reviewer approves or
-// declines it, or the student withdraws it.
+// The statuses of a refund request, as defined in GLOSSARY.md.
 export enum RefundRequestStatus {
   Open = "open",
   Approved = "approved",
@@ -41,7 +40,7 @@ export enum RefundRequestStatus {
 }
 
 export enum TeamMemberRole {
-  Admin = "admin",
+  TeamAdmin = "team_admin",
   Member = "member",
 }
 
