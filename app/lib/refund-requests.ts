@@ -23,6 +23,40 @@ export function lastDayOfRefundWindow(purchasedAt: string): string {
   return calendarDay(deadline);
 }
 
+export type CourseProgressFacts = {
+  secondsWatched: number;
+  completedLessons: number;
+  totalLessons: number;
+};
+
+export type CourseProgress = CourseProgressFacts & {
+  /** Share of lessons completed, 0–1. Zero for a course with no lessons. */
+  completedShare: number;
+  overWatchLimit: boolean;
+  overCompletionLimit: boolean;
+};
+
+/**
+ * A student's course progress measured against the refund eligibility
+ * limits. Reviewers see it on each open refund request; refund eligibility
+ * uses the same limits, so the two cannot disagree.
+ */
+export function measureCourseProgress(
+  facts: CourseProgressFacts
+): CourseProgress {
+  const completedShare =
+    facts.totalLessons > 0 ? facts.completedLessons / facts.totalLessons : 0;
+
+  return {
+    secondsWatched: facts.secondsWatched,
+    completedLessons: facts.completedLessons,
+    totalLessons: facts.totalLessons,
+    completedShare,
+    overWatchLimit: facts.secondsWatched >= REFUND_WATCH_LIMIT_SECONDS,
+    overCompletionLimit: completedShare >= REFUND_COMPLETION_LIMIT,
+  };
+}
+
 export type RefundEligibilityFacts = {
   purchasedAt: string;
   amountPaid: number;
@@ -82,17 +116,16 @@ export function checkRefundEligibility(
     };
   }
 
-  if (
-    facts.totalLessons > 0 &&
-    facts.completedLessons / facts.totalLessons >= REFUND_COMPLETION_LIMIT
-  ) {
+  const progress = measureCourseProgress(facts);
+
+  if (progress.overCompletionLimit) {
     return {
       eligible: false,
       message: "You have completed too much of this course to request a refund.",
     };
   }
 
-  if (facts.secondsWatched >= REFUND_WATCH_LIMIT_SECONDS) {
+  if (progress.overWatchLimit) {
     return {
       eligible: false,
       message: "You have watched too much of this course to request a refund.",

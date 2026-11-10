@@ -565,7 +565,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     !user ||
     (user.role !== UserRole.Instructor && user.role !== UserRole.Admin)
   ) {
-    throw data("Only instructors and admins can access this page.", {
+    throw data("Only instructors and platform admins can access this page.", {
       status: 403,
     });
   }
@@ -654,7 +654,7 @@ export async function action({ params, request }: Route.ActionArgs) {
     !user ||
     (user.role !== UserRole.Instructor && user.role !== UserRole.Admin)
   ) {
-    throw data("Only instructors and admins can edit courses.", {
+    throw data("Only instructors and platform admins can edit courses.", {
       status: 403,
     });
   }

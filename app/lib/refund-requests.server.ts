@@ -18,6 +18,7 @@ import {
 import {
   buildRefundRequestEmail,
   checkRefundEligibility,
+  measureCourseProgress,
 } from "~/lib/refund-requests";
 
 // The database side of refund requests. The rules themselves live in
@@ -153,6 +154,7 @@ const refundRequestColumns = {
   decidedAt: refundRequests.decidedAt,
   withdrawnAt: refundRequests.withdrawnAt,
   refundableAmount: purchases.amountPaid,
+  courseId: courses.id,
   courseTitle: courses.title,
   courseSlug: courses.slug,
   studentId: users.id,
@@ -176,12 +178,30 @@ export function listRefundRequestsForStudent(studentId: number) {
     .all();
 }
 
-/** Open refund requests first (oldest first), then recent decisions. */
+/** The student's course progress as it is now, against the refund limits. */
+function getCourseProgress(studentId: number, courseId: number) {
+  const lessonIds = getLessonIdsForCourse(courseId);
+
+  return measureCourseProgress({
+    secondsWatched: getSecondsWatched(studentId, lessonIds),
+    completedLessons: getCompletedLessonCount(studentId, lessonIds),
+    totalLessons: lessonIds.length,
+  });
+}
+
+/**
+ * Open refund requests first (oldest first), each with the student's current
+ * course progress, then recent decisions.
+ */
 export function listRefundRequestsForReview() {
   const open = selectRefundRequests()
     .where(eq(refundRequests.status, RefundRequestStatus.Open))
     .orderBy(refundRequests.requestedAt)
-    .all();
+    .all()
+    .map((request) => ({
+      ...request,
+      courseProgress: getCourseProgress(request.studentId, request.courseId),
+    }));
 
   const decided = selectRefundRequests()
     .where(isNotNull(refundRequests.decidedAt))

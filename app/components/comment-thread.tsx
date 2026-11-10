@@ -237,7 +237,7 @@ function CommentItem({
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-medium">{comment.author.name}</span>
             {comment.author.isInstructor && <AuthorBadge label="Instructor" />}
-            {comment.author.isAdmin && <AuthorBadge label="Admin" />}
+            {comment.author.isAdmin && <AuthorBadge label="Platform admin" />}
             <span
               className="text-xs text-muted-foreground"
               suppressHydrationWarning
@@ -347,7 +347,7 @@ export function CommentThread({
 }: {
   comments: RenderedComment[];
   currentUserId: number | null;
-  /** Owning instructor or admin — may delete anyone's comment. */
+  /** Owning instructor or platform admin — may delete anyone's comment. */
   canModerate: boolean;
   canPost: boolean;
   instructorName: string;

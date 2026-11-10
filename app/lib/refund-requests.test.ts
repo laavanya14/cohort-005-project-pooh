@@ -3,6 +3,7 @@ import { RefundRequestStatus } from "~/db/schema";
 import {
   buildRefundRequestEmail,
   checkRefundEligibility,
+  measureCourseProgress,
   type RefundEligibilityFacts,
 } from "./refund-requests";
 
@@ -93,6 +94,65 @@ describe("checkRefundEligibility", () => {
     expect(
       checkRefundEligibility(facts({ isRefundedPurchase: true })).eligible
     ).toBe(false);
+  });
+});
+
+describe("measureCourseProgress", () => {
+  it("reports hours watched and lessons completed under both limits", () => {
+    expect(
+      measureCourseProgress({
+        secondsWatched: 100 * 60,
+        completedLessons: 6,
+        totalLessons: 20,
+      })
+    ).toEqual({
+      secondsWatched: 6000,
+      completedLessons: 6,
+      totalLessons: 20,
+      completedShare: 0.3,
+      overWatchLimit: false,
+      overCompletionLimit: false,
+    });
+  });
+
+  it("is over the watch limit from exactly two hours", () => {
+    const justUnder = { secondsWatched: 2 * 60 * 60 - 1, completedLessons: 0, totalLessons: 10 };
+    const atLimit = { ...justUnder, secondsWatched: 2 * 60 * 60 };
+
+    expect(measureCourseProgress(justUnder).overWatchLimit).toBe(false);
+    expect(measureCourseProgress(atLimit).overWatchLimit).toBe(true);
+  });
+
+  it("is over the completion limit from exactly half the lessons", () => {
+    const justUnder = { secondsWatched: 0, completedLessons: 4, totalLessons: 10 };
+    const atLimit = { ...justUnder, completedLessons: 5 };
+
+    expect(measureCourseProgress(justUnder).overCompletionLimit).toBe(false);
+    expect(measureCourseProgress(atLimit).overCompletionLimit).toBe(true);
+  });
+
+  it("treats a course with no lessons as nothing completed", () => {
+    expect(
+      measureCourseProgress({ secondsWatched: 0, completedLessons: 0, totalLessons: 0 })
+    ).toMatchObject({ completedShare: 0, overCompletionLimit: false });
+  });
+
+  it("agrees with refund eligibility on where the limits are", () => {
+    // A request the reviewer sees as over a limit is one the student could no
+    // longer make — the two must never drift apart.
+    const cases = [
+      { secondsWatched: 7199, completedLessons: 4 },
+      { secondsWatched: 7200, completedLessons: 4 },
+      { secondsWatched: 7199, completedLessons: 5 },
+    ];
+
+    for (const progress of cases) {
+      const measured = measureCourseProgress({ ...progress, totalLessons: 10 });
+      const eligibility = checkRefundEligibility(facts(progress));
+      expect(eligibility.eligible).toBe(
+        !measured.overWatchLimit && !measured.overCompletionLimit
+      );
+    }
   });
 });
 
