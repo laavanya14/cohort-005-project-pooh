@@ -158,7 +158,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 
   if (
     !user ||
-    (user.role !== UserRole.Instructor && user.role !== UserRole.Admin)
+    (user.role !== UserRole.Instructor && user.role !== UserRole.PlatformAdmin)
   ) {
     throw data("Only instructors and platform admins can access this page.", {
       status: 403,
@@ -176,7 +176,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     throw data("Course not found.", { status: 404 });
   }
 
-  if (course.instructorId !== currentUserId && user.role !== UserRole.Admin) {
+  if (course.instructorId !== currentUserId && user.role !== UserRole.PlatformAdmin) {
     throw data("You can only view students for your own courses.", {
       status: 403,
     });

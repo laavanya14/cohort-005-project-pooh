@@ -843,7 +843,7 @@ export async function loader({ request, url }: Route.LoaderArgs) {
         eq(reply.parentId, comments.id),
         isNull(reply.deletedAt),
         or(
-          eq(replyAuthor.role, UserRole.Admin),
+          eq(replyAuthor.role, UserRole.PlatformAdmin),
           eq(reply.userId, courses.instructorId)
         )
       )
@@ -853,7 +853,7 @@ export async function loader({ request, url }: Route.LoaderArgs) {
     isNull(comments.parentId),
     isNull(comments.deletedAt),
     // Staff asking their own question shouldn't queue up as work for themselves.
-    ne(questionAuthor.role, UserRole.Admin),
+    ne(questionAuthor.role, UserRole.PlatformAdmin),
     ne(comments.userId, courses.instructorId),
     notExists(staffReply),
   ];

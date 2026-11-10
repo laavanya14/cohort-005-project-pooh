@@ -197,7 +197,7 @@ function getTeamForAdmin(userId: number) {
     .where(
       and(
         eq(teamMembers.userId, userId),
-        eq(teamMembers.role, TeamMemberRole.Admin)
+        eq(teamMembers.role, TeamMemberRole.TeamAdmin)
       )
     )
     .get();
@@ -213,7 +213,7 @@ function getOrCreateTeamForUser(userId: number) {
 
   const team = db.insert(teams).values({}).returning().get();
   db.insert(teamMembers)
-    .values({ teamId: team.id, userId, role: TeamMemberRole.Admin })
+    .values({ teamId: team.id, userId, role: TeamMemberRole.TeamAdmin })
     .returning()
     .get();
   return team;

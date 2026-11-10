@@ -84,7 +84,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const currentUser = getUserById(currentUserId);
 
-  if (!currentUser || currentUser.role !== UserRole.Admin) {
+  if (!currentUser || currentUser.role !== UserRole.PlatformAdmin) {
     throw data("Only platform admins can access this page.", {
       status: 403,
     });
@@ -103,7 +103,7 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   const currentUser = getUserById(currentUserId);
-  if (!currentUser || currentUser.role !== UserRole.Admin) {
+  if (!currentUser || currentUser.role !== UserRole.PlatformAdmin) {
     throw data("Only platform admins can manage users.", { status: 403 });
   }
 
@@ -134,7 +134,7 @@ export async function action({ request }: Route.ActionArgs) {
 
 function roleBadge(role: string) {
   switch (role) {
-    case UserRole.Admin:
+    case UserRole.PlatformAdmin:
       return (
         <span className="inline-flex items-center rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-medium text-purple-800 dark:bg-purple-900/30 dark:text-purple-400">
           Platform admin
@@ -290,7 +290,7 @@ function EditableUserRow({
           <SelectContent>
             <SelectItem value={UserRole.Student}>Student</SelectItem>
             <SelectItem value={UserRole.Instructor}>Instructor</SelectItem>
-            <SelectItem value={UserRole.Admin}>Admin</SelectItem>
+            <SelectItem value={UserRole.PlatformAdmin}>Platform admin</SelectItem>
           </SelectContent>
         </Select>
       </td>

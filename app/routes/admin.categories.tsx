@@ -153,7 +153,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const currentUser = getUserById(currentUserId);
 
-  if (!currentUser || currentUser.role !== UserRole.Admin) {
+  if (!currentUser || currentUser.role !== UserRole.PlatformAdmin) {
     throw data("Only platform admins can access this page.", {
       status: 403,
     });
@@ -172,7 +172,7 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   const currentUser = getUserById(currentUserId);
-  if (!currentUser || currentUser.role !== UserRole.Admin) {
+  if (!currentUser || currentUser.role !== UserRole.PlatformAdmin) {
     throw data("Only platform admins can manage categories.", { status: 403 });
   }
 

@@ -2,6 +2,7 @@ import { NavLink, Form } from "react-router";
 import { useState, useEffect } from "react";
 import { cn } from "~/lib/utils";
 import { UserRole } from "~/db/schema";
+import { userRoleLabels } from "~/lib/user-roles";
 import { UserAvatar } from "~/components/user-avatar";
 import {
   BookOpen,
@@ -73,37 +74,37 @@ const navItems: NavItem[] = [
     label: "Analytics",
     to: "/instructor/analytics",
     icon: <ChartColumn className="size-4" />,
-    roles: [UserRole.Instructor, UserRole.Admin],
+    roles: [UserRole.Instructor, UserRole.PlatformAdmin],
   },
   {
     label: "Questions",
     to: "/instructor/questions",
     icon: <MessageSquare className="size-4" />,
-    roles: [UserRole.Instructor, UserRole.Admin],
+    roles: [UserRole.Instructor, UserRole.PlatformAdmin],
   },
   {
     label: "Manage Users",
     to: "/admin/users",
     icon: <Users className="size-4" />,
-    roles: [UserRole.Admin],
+    roles: [UserRole.PlatformAdmin],
   },
   {
     label: "Manage Courses",
     to: "/admin/courses",
     icon: <Shield className="size-4" />,
-    roles: [UserRole.Admin],
+    roles: [UserRole.PlatformAdmin],
   },
   {
     label: "Categories",
     to: "/admin/categories",
     icon: <Tag className="size-4" />,
-    roles: [UserRole.Admin],
+    roles: [UserRole.PlatformAdmin],
   },
   {
     label: "Refund Requests",
     to: "/admin/refund-requests",
     icon: <ReceiptText className="size-4" />,
-    roles: [UserRole.Admin],
+    roles: [UserRole.PlatformAdmin],
   },
 ];
 
@@ -238,8 +239,8 @@ export function Sidebar({
               <div className="truncate text-sm font-medium">
                 {currentUser.name}
               </div>
-              <div className="truncate text-xs capitalize text-sidebar-foreground/50">
-                {currentUser.role}
+              <div className="truncate text-xs text-sidebar-foreground/50">
+                {userRoleLabels[currentUser.role]}
               </div>
             </div>
             <NavLink
