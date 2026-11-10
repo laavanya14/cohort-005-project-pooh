@@ -1,0 +1,63 @@
+# Glossary
+
+The canonical language for Cadence. UI copy, emails, error messages, code identifiers and DB enums all use these terms. When several words exist for one concept, the term here wins and the rest are listed under _Avoid_.
+
+## Refunds
+
+**Purchase**:
+A learner's payment for a course, which grants access to it.
+
+**Amount paid**:
+What the learner was actually charged for a purchase, after any discount.
+_Avoid_: Price (that is the course's list price, a different thing)
+
+**Refund window**:
+The 14 days after a purchase during which a refund request can be made.
+_Avoid_: Cancel window, cooling-off period
+
+**Refund eligibility**:
+Whether a purchase can have a refund request made: inside the refund window, under 2 hours watched, under 50% of lessons completed, and not a claimed team seat. Checked at the moment the request is made, identically on the course page and the server. A learner who withdraws a request may make a new one only if the purchase is still eligible.
+
+**Refund request**:
+A learner's ask to have the amount paid for a purchase given back. It is pending until a reviewer approves or declines it, or the learner withdraws it.
+_Avoid_: Reversal, cancellation, chargeback, refund (on its own)
+
+**Reason**:
+The learner's own explanation on a refund request.
+
+**Pending**:
+The status of a refund request that has been neither decided nor withdrawn.
+_Avoid_: Requested, open, pending refund, pending chargeback
+
+**Approved**:
+The status of a refund request a reviewer has accepted. Only an approved refund request produces a refund.
+
+**Declined**:
+The status of a refund request a reviewer has turned down. It always carries a decision note.
+_Avoid_: Rejected, denied
+
+**Withdrawn**:
+The status of a refund request the learner closed themselves while it was pending. It produces no refund.
+_Avoid_: Cancelled
+
+**Reviewer**:
+The staff member who approves or declines a refund request.
+_Avoid_: Resolver, admin (in this context)
+
+**Decision note**:
+The reviewer's explanation of their decision on a refund request. Required when declining, optional when approving.
+_Avoid_: Reason (that is the learner's), resolution
+
+**Refund**:
+The money given back to the learner's card after a refund request is approved. It is always the refundable amount.
+_Avoid_: Reversal, chargeback
+
+**Refundable amount**:
+How much a refund for a purchase would be: always the amount paid.
+_Avoid_: List price
+
+**Refunded purchase**:
+A purchase whose refund has been issued. It no longer grants access to the course.
+
+**Chargeback**:
+A dispute the cardholder raises through their bank, which forcibly takes the money back. Not modelled today, and never used to mean a refund request.
