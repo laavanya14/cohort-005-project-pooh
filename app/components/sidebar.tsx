@@ -41,6 +41,13 @@ interface SidebarProps {
   currentUser: CurrentUser | null;
   recentCourses?: RecentCourse[];
   isTeamAdmin?: boolean;
+  // PROTOTYPE — slots for the notifications bell/inbox variants
+  slots?: {
+    header?: React.ReactNode;
+    nav?: React.ReactNode;
+    section?: React.ReactNode;
+    footer?: React.ReactNode;
+  };
 }
 
 interface NavItem {
@@ -117,6 +124,7 @@ export function Sidebar({
   currentUser,
   recentCourses = [],
   isTeamAdmin = false,
+  slots = {},
 }: SidebarProps) {
   const currentUserRole = currentUser?.role ?? null;
   const [isDark, setIsDark] = useState(false);
@@ -136,13 +144,15 @@ export function Sidebar({
 
   return (
     <aside className="flex h-screen w-56 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
-      <div className="flex h-14 items-center border-b border-sidebar-border px-4">
+      <div className="flex h-14 items-center justify-between border-b border-sidebar-border px-4">
         <NavLink to="/" className="text-lg font-bold tracking-tight">
           Cadence
         </NavLink>
+        {slots.header}
       </div>
 
-      <nav className="flex-1 space-y-1 p-3">
+      <nav className="flex-1 space-y-1 overflow-y-auto p-3">
+        {slots.nav}
         {navItems
           .filter((item) => isVisible(item, currentUserRole))
           .map((item) => (
@@ -179,6 +189,8 @@ export function Sidebar({
           </NavLink>
         )}
       </nav>
+
+      {slots.section}
 
       {recentCourses.length > 0 && (
         <div className="border-t border-sidebar-border p-3">
@@ -242,6 +254,7 @@ export function Sidebar({
                 {currentUser.role}
               </div>
             </div>
+            {slots.footer}
             <NavLink
               to="/settings"
               title="Settings"
