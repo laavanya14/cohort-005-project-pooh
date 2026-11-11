@@ -109,3 +109,17 @@ _Avoid_: List price
 
 **Refunded purchase**:
 A purchase whose refund has been issued.
+
+## Notifications
+
+**Notification**:
+A message Cadence sends one person about something someone else, or Cadence itself, did that concerns them, such as their refund request being decided. It is never a confirmation of the person's own action: the email a buyer gets after raising a refund request is not a notification.
+_Avoid_: Alert, message
+
+**Inbox**:
+The place in Cadence where a person's notifications are kept for them to read and archive.
+_Avoid_: Feed, notification centre, bell
+
+**Notification preference**:
+A person's choice to get, or not get, one kind of notification by browser push or by email. It applies to the person on every device. Every notification still reaches their inbox, and some notifications about a buyer's money can't be turned off by email.
+_Avoid_: Subscription, notification setting
