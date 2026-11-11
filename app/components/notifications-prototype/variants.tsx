@@ -27,6 +27,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "~/lib/utils";
+import { PushInboxTop } from "~/components/push-prototype/push-permission";
 import { UserAvatar } from "~/components/user-avatar";
 import {
   kindLabel,
@@ -432,6 +433,7 @@ export function useVariantB(store: NotificationStore): Slots {
               );
             })}
           </div>
+          <PushInboxTop />
           {activeTab !== "archived" && (
             <div className="flex justify-end px-5 pt-3">
               <button

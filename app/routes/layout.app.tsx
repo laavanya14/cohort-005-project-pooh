@@ -9,13 +9,17 @@ import {
 } from "~/components/prototype-switcher";
 import { notificationsFor } from "~/components/notifications-prototype/fixtures";
 import {
-  VARIANTS,
-  describeState,
   useNotificationStore,
-  useVariantA,
   useVariantB,
-  useVariantC,
 } from "~/components/notifications-prototype/variants";
+import {
+  PUSH_VARIANTS,
+  PushOverlays,
+  describePush,
+  usePush,
+  usePushSync,
+  push,
+} from "~/components/push-prototype/push-permission";
 import { getCurrentUserId, getDevCountry } from "~/lib/session";
 import { getCountryTierInfo, COUNTRIES } from "~/lib/ppp";
 import { eq, and, or, sql, desc } from "drizzle-orm";
@@ -240,16 +244,16 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     isTeamAdmin: userIsTeamAdmin,
   } = loaderData;
 
-  // PROTOTYPE — notifications bell/inbox variants (?variant=A|B|C)
+  // PROTOTYPE — push permission variants (?variant=A|B|C|D). Inbox is drawer B.
   const store = useNotificationStore(
     notificationsFor(currentUser?.role ?? null, userIsTeamAdmin),
     String(currentUser?.id ?? "none")
   );
-  const [variant, setVariant] = usePrototypeVariant(VARIANTS.map((v) => v.key));
-  const variantSlots = { A: useVariantA(store), B: useVariantB(store), C: useVariantC(store) };
-  const slots = currentUser
-    ? variantSlots[variant as keyof typeof variantSlots]
-    : {};
+  const [variant, setVariant] = usePrototypeVariant(PUSH_VARIANTS.map((v) => v.key));
+  usePushSync(String(currentUser?.id ?? "none"), currentUser?.role ?? null, variant);
+  const pushState = usePush();
+  const inbox = useVariantB(store);
+  const slots = currentUser ? inbox : {};
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -263,12 +267,13 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
         <Outlet />
       </main>
       {slots.overlay}
+      <PushOverlays />
       <PrototypeSwitcher
-        variants={VARIANTS}
+        variants={PUSH_VARIANTS}
         current={variant}
         onChange={setVariant}
-        status={describeState(store)}
-        onReset={store.reset}
+        status={describePush(pushState)}
+        onReset={push.reset}
       />
       <DevUI
         users={users}
