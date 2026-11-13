@@ -11,6 +11,8 @@ import {
   users,
   UserRole,
 } from "~/db/schema";
+import { sendNotificationJobs } from "~/lib/notifications/outbox.server";
+import { createRecordingTransport } from "~/test/recording-transport";
 import { seedBaseData } from "~/test/setup";
 import { testDb } from "~/test/test-db";
 import { claimSeat } from "./seats.server";
@@ -97,6 +99,13 @@ function claimedBy(seatId: number) {
     .from(coupons)
     .where(eq(coupons.id, seatId))
     .get()?.redeemedByUserId;
+}
+
+/** What Knock is asked to do when the outbox sends its waiting jobs. */
+async function sendToKnock() {
+  const knock = createRecordingTransport();
+  await sendNotificationJobs({ transport: knock });
+  return knock.triggers;
 }
 
 describe("claimSeat", () => {
@@ -223,5 +232,87 @@ describe("claimSeat", () => {
     expect(claimSeat(seats[0].code, student.id, "IN")).toMatchObject({
       ok: true,
     });
+  });
+});
+
+describe("claimSeat notifications", () => {
+  it("tells the team admin who claimed a seat on their team licence", async () => {
+    const { student, teamAdmin, course, seats } = seedTeamLicence();
+
+    claimSeat(seats[0].code, student.id, "GB");
+
+    expect(await sendToKnock()).toEqual([
+      {
+        workflowKey: "seat-claimed",
+        idempotencyKey: expect.any(String),
+        recipients: [
+          {
+            id: String(teamAdmin.id),
+            name: "Team Admin",
+            email: "team-admin@example.com",
+          },
+        ],
+        actor: expect.objectContaining({ id: String(student.id) }),
+        data: {
+          notificationId: expect.any(String),
+          path: "/team",
+          courseTitle: course.title,
+          seatHolderName: student.name,
+        },
+      },
+    ]);
+  });
+
+  it("sends only all seats claimed, naming who claimed it, when the last seat is claimed", async () => {
+    const { student, teamAdmin, course, seats } = seedTeamLicence({
+      seatCount: 2,
+    });
+    const lastStudent = addStudent("last@example.com");
+    claimSeat(seats[0].code, student.id, "GB");
+    await sendToKnock();
+
+    claimSeat(seats[1].code, lastStudent.id, "GB");
+
+    expect(await sendToKnock()).toEqual([
+      expect.objectContaining({
+        workflowKey: "all-seats-claimed",
+        recipients: [expect.objectContaining({ id: String(teamAdmin.id) })],
+        data: {
+          notificationId: expect.any(String),
+          path: "/team",
+          courseTitle: course.title,
+          seatHolderName: "last@example.com",
+        },
+      }),
+    ]);
+  });
+
+  it("doesn't notify a team admin who claims a seat on their own team licence", async () => {
+    const { teamAdmin, seats } = seedTeamLicence();
+
+    claimSeat(seats[0].code, teamAdmin.id, "GB");
+
+    expect(await sendToKnock()).toEqual([]);
+  });
+
+  it("doesn't notify anyone when the claim is refused", async () => {
+    const { student, seats } = seedTeamLicence();
+
+    claimSeat(seats[0].code, student.id, "IN");
+
+    expect(await sendToKnock()).toEqual([]);
+  });
+
+  it("sends nothing when the caller's transaction rolls back", async () => {
+    const { student, seats } = seedTeamLicence();
+
+    expect(() =>
+      db.transaction((tx) => {
+        claimSeat(seats[0].code, student.id, "GB", tx);
+        throw new Error("The caller's next step failed.");
+      })
+    ).toThrow("The caller's next step failed.");
+
+    expect(await sendToKnock()).toEqual([]);
   });
 });
