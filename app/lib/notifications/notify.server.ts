@@ -20,6 +20,14 @@ export type WorkflowData = {
     courseTitle: string;
     decisionNote: string | null;
   };
+  "seat-claimed": {
+    courseTitle: string;
+    seatHolderName: string;
+  };
+  "all-seats-claimed": {
+    courseTitle: string;
+    seatHolderName: string;
+  };
 };
 
 export type WorkflowKey = keyof WorkflowData;
@@ -57,6 +65,18 @@ export const TRIGGER_DATA_FIELDS = {
     outcome: true,
     courseTitle: true,
     decisionNote: true,
+    notificationId: true,
+    path: true,
+  },
+  "seat-claimed": {
+    courseTitle: true,
+    seatHolderName: true,
+    notificationId: true,
+    path: true,
+  },
+  "all-seats-claimed": {
+    courseTitle: true,
+    seatHolderName: true,
     notificationId: true,
     path: true,
   },
