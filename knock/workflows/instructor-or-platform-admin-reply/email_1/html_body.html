@@ -1,0 +1,8 @@
+{% capture headline %}{% render 'instructor-or-platform-admin-reply-copy', part: 'headline', name: data.commenterName, reply: data.commentText, lesson: data.lessonTitle %}{% endcapture %}
+{% capture detail %}{% render 'instructor-or-platform-admin-reply-copy', part: 'detail', name: data.commenterName, reply: data.commentText, lesson: data.lessonTitle %}{% endcapture %}
+<p><strong>{{ headline | escape }}</strong></p>
+<p>{{ detail | escape }}</p>
+<p>{{ data.courseTitle | escape }}</p>
+<p><a href="{{ vars.app_url }}{{ data.path }}">Read the reply</a></p>
+<hr />
+<p><a href="{{ vars.app_url }}/settings">Manage notifications</a></p>

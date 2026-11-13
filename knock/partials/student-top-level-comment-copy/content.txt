@@ -1,0 +1,5 @@
+{%- if part == 'headline' -%}
+  New question on {{ lesson | strip_newlines }}
+{%- else -%}
+  {{ student | strip_newlines }}: "{{ comment | strip_newlines | truncate: 100 }}"
+{%- endif -%}

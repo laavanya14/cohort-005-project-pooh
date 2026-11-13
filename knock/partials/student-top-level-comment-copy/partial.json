@@ -1,0 +1,7 @@
+{
+  "key": "student-top-level-comment-copy",
+  "name": "A student's top-level comment: headline and detail line",
+  "description": "The headline (part: 'headline') and detail line (part: 'detail') every student-top-level-comment template shows. Takes lesson, student and comment.",
+  "type": "text",
+  "content@": "content.txt"
+}

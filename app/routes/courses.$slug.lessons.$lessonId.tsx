@@ -9,7 +9,11 @@ import {
   CommentThread,
   type RenderedComment,
 } from "~/components/comment-thread";
-import { createComment, validateCommentBody } from "~/lib/comments.server";
+import {
+  createComment,
+  deleteComment,
+  editComment,
+} from "~/lib/comments.server";
 import { db } from "~/db";
 import {
   categories,
@@ -386,48 +390,6 @@ function getLessonThread(lessonId: number): ThreadComment[] {
 
   // A deleted question with no replies left has nothing worth showing.
   return topLevel.filter((c) => !c.deleted || c.replies.length > 0);
-}
-
-function updateComment(commentId: number, userId: number, body: string) {
-  const trimmed = validateCommentBody(body);
-
-  const existing = getCommentById(commentId);
-  if (!existing) {
-    throw new Error("Comment not found");
-  }
-  if (existing.deletedAt !== null) {
-    throw new Error("Comment has been deleted");
-  }
-  if (existing.userId !== userId) {
-    throw new Error("You can only edit your own comments");
-  }
-
-  return db
-    .update(comments)
-    .set({ body: trimmed, editedAt: new Date().toISOString() })
-    .where(eq(comments.id, commentId))
-    .returning()
-    .get();
-}
-
-function deleteComment(commentId: number, userId: number, isStaff: boolean) {
-  const existing = getCommentById(commentId);
-  if (!existing) {
-    throw new Error("Comment not found");
-  }
-  if (existing.userId !== userId && !isStaff) {
-    throw new Error("You can only delete your own comments");
-  }
-  if (existing.deletedAt !== null) {
-    return existing;
-  }
-
-  return db
-    .update(comments)
-    .set({ deletedAt: new Date().toISOString() })
-    .where(eq(comments.id, commentId))
-    .returning()
-    .get();
 }
 
 function getQuizByLessonId(lessonId: number) {
@@ -874,7 +836,7 @@ export async function action({ params, request }: Route.ActionArgs) {
         if (!existing || existing.lessonId !== lessonId) {
           throw data("Comment not found", { status: 404 });
         }
-        updateComment(parsed.data.commentId, currentUserId, parsed.data.body);
+        editComment(parsed.data.commentId, currentUserId, parsed.data.body);
         return { ok: true };
       }
 
