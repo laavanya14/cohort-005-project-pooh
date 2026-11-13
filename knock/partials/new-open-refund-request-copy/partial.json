@@ -1,0 +1,7 @@
+{
+  "key": "new-open-refund-request-copy",
+  "name": "New open refund request: headline and detail line",
+  "description": "The headline (part: 'headline') and detail line (part: 'detail') every new-open-refund-request template shows. Takes buyer, course and reason.",
+  "type": "text",
+  "content@": "content.txt"
+}

@@ -1,20 +1,31 @@
-import type { NotificationTransport, TriggerRequest } from "./transport";
+import type {
+  InAppMessageSelector,
+  NotificationTransport,
+  TriggerRequest,
+} from "./transport";
 
 // The kinds of job the notification outbox holds. Each is one call to the
 // Knock-facing interface. To add one, add a member to `NotificationJob` and a
 // case to `performJob`; the compiler points at anything else that's missing.
 
-export type NotificationJob = {
-  type: "trigger";
-  workflowKey: string;
-  request: TriggerRequest;
-};
+export type NotificationJob =
+  | {
+      type: "trigger";
+      workflowKey: string;
+      request: TriggerRequest;
+    }
+  | {
+      type: "bulkArchive";
+      selector: InAppMessageSelector;
+    };
 
 /** A short description of the job for the server log. */
 export function describeJob(job: NotificationJob) {
   switch (job.type) {
     case "trigger":
       return `the ${job.workflowKey} trigger`;
+    case "bulkArchive":
+      return `the bulk archive of ${job.selector.workflowKey} by ${job.selector.key} ${job.selector.value}`;
   }
 }
 
@@ -29,5 +40,7 @@ export function performJob(
       return transport.trigger(job.workflowKey, job.request, {
         idempotencyKey,
       });
+    case "bulkArchive":
+      return transport.bulkArchive(job.selector);
   }
 }

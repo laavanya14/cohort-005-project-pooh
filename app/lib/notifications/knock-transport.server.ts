@@ -5,13 +5,15 @@ import type { NotificationTransport } from "./transport";
 // environment (the Knock Node SDK would read KNOCK_API_KEY by itself).
 //
 // Each method is one Knock call made through `callKnock`. To add one (bulk
-// archive, bulk mark read, setPushTokens, preferences), add it to
-// `NotificationTransport`, then here, the file fake and the recording fake.
+// mark read, setPushTokens, preferences), add it to `NotificationTransport`,
+// then here, the file fake and the recording fake.
 
 const KNOCK_API = "https://api.knock.app";
 
 export type KnockTransportOptions = {
   secretKey: string;
+  /** The in-app channel's id (a UUID) in this Knock environment. */
+  inAppChannelId: string;
   /** Replaced in tests. */
   fetch?: typeof fetch;
   baseUrl?: string;
@@ -27,6 +29,7 @@ type KnockCall = {
 
 export function createKnockTransport({
   secretKey,
+  inAppChannelId,
   fetch: fetchKnock = globalThis.fetch,
   baseUrl = KNOCK_API,
 }: KnockTransportOptions): NotificationTransport {
@@ -62,6 +65,18 @@ export function createKnockTransport({
         path: `/v1/workflows/${encodeURIComponent(workflowKey)}/trigger`,
         body: { recipients, actor, data },
         idempotencyKey,
+      });
+    },
+
+    async bulkArchive({ workflowKey, key, value }) {
+      await callKnock({
+        method: "POST",
+        path: `/v1/channels/${encodeURIComponent(inAppChannelId)}/messages/bulk/archive`,
+        // Without filters Knock would archive every message in the channel.
+        body: {
+          trigger_data: JSON.stringify({ [key]: value }),
+          workflows: [workflowKey],
+        },
       });
     },
   };

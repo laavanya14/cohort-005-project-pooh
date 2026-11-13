@@ -391,6 +391,10 @@ export const notificationJobs = sqliteTable(
     nextRunAt: text("next_run_at").notNull(),
     // Set when Knock still hadn't accepted the job 24 hours after it was saved.
     failedAt: text("failed_at"),
+    // Another job that must be accepted first. While that job is still
+    // waiting, this one is held back (for example, a bulk archive waits for
+    // the trigger that created the copies it archives).
+    afterJobId: text("after_job_id"),
   },
   (table) => [index("notification_jobs_next_run_idx").on(table.nextRunAt)]
 );

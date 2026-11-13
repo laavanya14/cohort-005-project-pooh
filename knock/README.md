@@ -52,3 +52,5 @@ npx @knocklabs/cli commit promote --to production
 ## Checking by hand
 
 With development keys in `.env`, run `npm run test:knock`, then `npm run dev`, decide a refund request at `/admin/refund-requests`, and confirm in Knock's development environment (Messages) that the buyer got an in-app message and an email.
+
+Raising a refund request sends `new-open-refund-request` to every platform admin. Deciding or withdrawing it bulk archives every copy, selected by `refundRequestId` (Knock matches the value's type too, so it's always a number). Without Knock keys, each bulk archive is written to `.outbox/bulk-archives/`.

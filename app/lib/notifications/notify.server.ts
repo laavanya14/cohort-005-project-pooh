@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { inArray } from "drizzle-orm";
-import { users } from "~/db/schema";
+import { asc, eq, inArray } from "drizzle-orm";
+import { users, type UserRole } from "~/db/schema";
 import type { DbExecutor } from "~/db/executor";
 import {
   enqueueNotificationJob,
@@ -19,6 +19,13 @@ export type WorkflowData = {
     outcome: "approved" | "declined";
     courseTitle: string;
     decisionNote: string | null;
+  };
+  "new-open-refund-request": {
+    /** Flat and top-level, so every platform admin's copy can be archived together. */
+    refundRequestId: number;
+    buyerName: string;
+    courseTitle: string;
+    reason: string;
   };
   "new-enrollment": {
     /** Knock batches each instructor's notifications per course on this. */
@@ -64,8 +71,11 @@ type CommentNotificationData = {
 
 export type WorkflowKey = keyof WorkflowData;
 
-/** Who gets a notification, worked out when it is triggered. */
-export type RecipientQuery = { userIds: number[] };
+/**
+ * Who gets a notification, worked out when it is triggered: given people, or
+ * everyone whose role is `role` at that moment.
+ */
+export type RecipientQuery = { userIds: number[] } | { role: UserRole };
 
 export type NotificationEvent = {
   [K in WorkflowKey]: {
@@ -97,6 +107,14 @@ export const TRIGGER_DATA_FIELDS = {
     outcome: true,
     courseTitle: true,
     decisionNote: true,
+    notificationId: true,
+    path: true,
+  },
+  "new-open-refund-request": {
+    refundRequestId: true,
+    buyerName: true,
+    courseTitle: true,
+    reason: true,
     notificationId: true,
     path: true,
   },
@@ -162,13 +180,26 @@ export const TRIGGER_DATA_FIELDS = {
   [K in WorkflowKey]: Record<keyof TriggerData<K>, true>;
 };
 
+const personColumns = { id: users.id, name: users.name, email: users.email };
+
 function lookUpPeople(tx: DbExecutor, userIds: number[]) {
   if (userIds.length === 0) return [];
 
   return tx
-    .select({ id: users.id, name: users.name, email: users.email })
+    .select(personColumns)
     .from(users)
     .where(inArray(users.id, userIds))
+    .all();
+}
+
+function lookUpRecipients(tx: DbExecutor, query: RecipientQuery) {
+  if ("userIds" in query) return lookUpPeople(tx, query.userIds);
+
+  return tx
+    .select(personColumns)
+    .from(users)
+    .where(eq(users.role, query.role))
+    .orderBy(asc(users.id))
     .all();
 }
 
@@ -185,7 +216,7 @@ function asRecipient(user: {
  * so the notification is sent only if the action commits.
  */
 export function notify(tx: DbExecutor, event: NotificationEvent) {
-  const recipients = lookUpPeople(tx, event.recipients.userIds)
+  const recipients = lookUpRecipients(tx, event.recipients)
     .filter((person) => person.id !== event.actorId)
     .map(asRecipient);
 
@@ -209,5 +240,32 @@ export function notify(tx: DbExecutor, event: NotificationEvent) {
     },
     notificationId
   );
+  sendNotificationJobsSoon();
+}
+
+/** The trigger-data fields of a workflow that copies can be archived by. */
+type ArchiveKey<K extends WorkflowKey> = {
+  [F in keyof WorkflowData[K]]: WorkflowData[K][F] extends string | number
+    ? F
+    : never;
+}[keyof WorkflowData[K]] &
+  string;
+
+/**
+ * Archives every inbox copy of a workflow's notifications whose trigger data
+ * has `key` equal to `value`, for everyone who got one. Call it inside the
+ * action's transaction, so it happens only if the action commits.
+ */
+export function archiveNotifications<
+  K extends WorkflowKey,
+  F extends ArchiveKey<K>,
+>(
+  tx: DbExecutor,
+  { workflowKey, key, value }: { workflowKey: K; key: F; value: WorkflowData[K][F] }
+) {
+  enqueueNotificationJob(tx, {
+    type: "bulkArchive",
+    selector: { workflowKey, key, value: value as string | number },
+  });
   sendNotificationJobsSoon();
 }

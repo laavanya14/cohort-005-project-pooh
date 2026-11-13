@@ -118,6 +118,13 @@ describe("the Knock templates kept in the repo", () => {
     }
   );
 
+  it("puts a new open refund request in Waiting on you, inbox only until browser push", () => {
+    const workflow = readWorkflow("new-open-refund-request");
+
+    expect(workflow.categories).toContain("waiting-on-you");
+    expect(workflow.steps.map((step) => step.channel_key)).toEqual(["in-app"]);
+  });
+
   it.each(repoKeys)("tags %s with exactly one kind", (key) => {
     const { categories = [] } = readWorkflow(key);
     expect(categories.filter((c) => kinds.includes(c))).toHaveLength(1);
