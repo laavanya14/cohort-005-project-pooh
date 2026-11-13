@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { inArray } from "drizzle-orm";
 import { users } from "~/db/schema";
+import type { DbExecutor } from "~/db/executor";
 import {
   enqueueNotificationJob,
   sendNotificationJobsSoon,
-  type Database,
 } from "./outbox.server";
 import type { NotificationRecipient } from "./transport";
 
@@ -46,7 +46,7 @@ export type TriggerData<K extends WorkflowKey> = WorkflowData[K] & {
   path: string;
 };
 
-function lookUpPeople(tx: Database, userIds: number[]) {
+function lookUpPeople(tx: DbExecutor, userIds: number[]) {
   if (userIds.length === 0) return [];
 
   return tx
@@ -68,7 +68,7 @@ function asRecipient(user: {
  * Saves the notification to send. Call it inside the action's transaction,
  * so the notification is sent only if the action commits.
  */
-export function notify(tx: Database, event: NotificationEvent) {
+export function notify(tx: DbExecutor, event: NotificationEvent) {
   const recipients = lookUpPeople(tx, event.recipients.userIds)
     .filter((person) => person.id !== event.actorId)
     .map(asRecipient);

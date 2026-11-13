@@ -1,9 +1,7 @@
 import { randomUUID } from "node:crypto";
-import type { RunResult } from "better-sqlite3";
 import { and, asc, eq, isNull, lte, sql } from "drizzle-orm";
-import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
 import { db } from "~/db";
-import * as schema from "~/db/schema";
+import type { DbExecutor } from "~/db/executor";
 import { notificationJobs } from "~/db/schema";
 import { describeJob, performJob, type NotificationJob } from "./jobs";
 import type { NotificationTransport } from "./transport";
@@ -23,15 +21,12 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
-/** The app's database, or a transaction on it. */
-export type Database = BaseSQLiteDatabase<"sync", RunResult, typeof schema>;
-
 /**
  * Saves a job to send. Call it inside the action's transaction. Returns the
  * job's id, which is also its idempotency key.
  */
 export function enqueueNotificationJob(
-  tx: Database,
+  tx: DbExecutor,
   job: NotificationJob,
   id: string = randomUUID()
 ) {

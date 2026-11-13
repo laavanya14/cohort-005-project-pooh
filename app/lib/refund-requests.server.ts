@@ -21,7 +21,7 @@ import {
   measureCourseProgress,
 } from "~/lib/refund-requests";
 import { notify } from "~/lib/notifications/notify.server";
-import type { Database } from "~/lib/notifications/outbox.server";
+import type { DbExecutor } from "~/db/executor";
 
 // The database side of refund requests. The rules themselves live in
 // refund-requests.ts; this file only gathers the facts and writes the results.
@@ -265,7 +265,7 @@ function requireOpenRefundRequest(refundRequestId: number) {
  * reviewer, who is the actor, so they never get it themselves.
  */
 function notifyRefundRequestDecided(
-  tx: Database,
+  tx: DbExecutor,
   reviewerId: number,
   refundRequestId: number
 ) {
