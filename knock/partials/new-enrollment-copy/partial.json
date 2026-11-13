@@ -1,0 +1,7 @@
+{
+  "key": "new-enrollment-copy",
+  "name": "New enrollment: headline and detail line",
+  "description": "The headline (part: 'headline') and detail line (part: 'detail') of the new-enrollment inbox item. Takes count (enrollments in the batch), course and student (the latest).",
+  "type": "text",
+  "content@": "content.txt"
+}

@@ -1,0 +1,32 @@
+{
+  "key": "new-enrollment",
+  "name": "New enrollment",
+  "description": "Tells an instructor a student enrolled in their course. Inbox only, batched into one item per course per hour.",
+  "categories": [
+    "activity"
+  ],
+  "steps": [
+    {
+      "ref": "batch_1",
+      "type": "batch",
+      "settings": {
+        "batch_key": "data.courseId",
+        "batch_window": {
+          "unit": "hours",
+          "value": 1
+        },
+        "batch_window_type": "fixed",
+        "batch_order": "asc"
+      }
+    },
+    {
+      "ref": "in_app_feed_1",
+      "type": "channel",
+      "channel_key": "in-app",
+      "template": {
+        "action_url": "{{ data.path }}",
+        "markdown_body@": "in_app_feed_1/markdown_body.md"
+      }
+    }
+  ]
+}
