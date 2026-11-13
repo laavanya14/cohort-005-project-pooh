@@ -1,0 +1,5 @@
+{%- if part == 'headline' -%}
+  {%- if outcome == 'approved' -%}We approved your refund request{%- else -%}We declined your refund request{%- endif -%}
+{%- else -%}
+  {{ course | strip_newlines }}{%- if note and note != '' %} · "{{ note | strip_newlines | truncate: 100 }}"{%- endif -%}
+{%- endif -%}

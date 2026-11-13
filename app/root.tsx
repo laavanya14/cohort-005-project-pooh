@@ -9,6 +9,10 @@ import {
 } from "react-router";
 
 import type { Route } from "./+types/root";
+import {
+  publicNotificationConfig,
+  readNotificationConfig,
+} from "~/lib/notifications/config.server";
 import "./app.css";
 
 const darkModeScript = `
@@ -35,6 +39,17 @@ export const links: Route.LinksFunction = () => [
     href: "https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap",
   },
 ];
+
+/**
+ * App-wide values the browser needs. Public notification config comes from
+ * here, not from `VITE_` variables, so one build runs in every environment.
+ * Read it with `useRouteLoaderData<typeof loader>("root")`.
+ */
+export function loader() {
+  return {
+    notifications: publicNotificationConfig(readNotificationConfig()),
+  };
+}
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (

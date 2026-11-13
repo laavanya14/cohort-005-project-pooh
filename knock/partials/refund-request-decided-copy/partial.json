@@ -1,0 +1,7 @@
+{
+  "key": "refund-request-decided-copy",
+  "name": "Refund request decided: headline and detail line",
+  "description": "The headline (part: 'headline') and detail line (part: 'detail') every refund-request-decided template shows. Takes outcome, course and note.",
+  "type": "text",
+  "content@": "content.txt"
+}

@@ -1,0 +1,27 @@
+{
+  "key": "refund-request-decided",
+  "name": "Refund request decided",
+  "description": "Tells the buyer a reviewer approved or declined their refund request. Cadence speaks for the reviewer.",
+  "categories": ["about-you"],
+  "steps": [
+    {
+      "ref": "in_app_feed_1",
+      "type": "channel",
+      "channel_key": "in-app",
+      "template": {
+        "action_url": "{{ data.path }}",
+        "markdown_body@": "in_app_feed_1/markdown_body.md"
+      }
+    },
+    {
+      "ref": "email_1",
+      "type": "channel",
+      "channel_key": "postmark",
+      "template": {
+        "settings": { "layout_key": "default" },
+        "subject": "{% render 'refund-request-decided-copy', part: 'headline', outcome: data.outcome, course: data.courseTitle, note: data.decisionNote %}",
+        "html_body@": "email_1/html_body.html"
+      }
+    }
+  ]
+}

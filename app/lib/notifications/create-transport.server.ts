@@ -1,19 +1,18 @@
+import { readNotificationConfig } from "./config.server";
 import { createFileTransport } from "./file-transport.server";
+import { createKnockTransport } from "./knock-transport.server";
 import type { NotificationTransport } from "./transport";
 
 /**
- * The Knock-facing interface the server process uses. Without
- * KNOCK_SECRET_KEY, notifications are written to .outbox/notifications/.
+ * The Knock-facing interface the server process uses. With KNOCK_SECRET_KEY
+ * set it sends to Knock, and throws if anything else Knock needs is missing.
+ * Without it, notifications are written to .outbox/notifications/.
  */
 export function createNotificationTransport(
-  env: NodeJS.ProcessEnv = process.env
+  env: Record<string, string | undefined> = process.env
 ): NotificationTransport {
-  if (!env.KNOCK_SECRET_KEY) return createFileTransport();
+  const { knock } = readNotificationConfig(env);
+  if (!knock) return createFileTransport();
 
-  // The real Knock adapter is the next piece of work. Until then, a key that
-  // is set must not quietly fall back to the fake.
-  throw new Error(
-    "KNOCK_SECRET_KEY is set, but Cadence can't send to Knock yet. Unset it " +
-      "to write notifications to .outbox/notifications/ instead."
-  );
+  return createKnockTransport({ secretKey: knock.secretKey });
 }

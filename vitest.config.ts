@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [tsconfigPaths()],
   test: {
     globals: true,
-    exclude: [...configDefaults.exclude],
+    exclude: [...configDefaults.exclude, "**/*.knock.test.ts"],
     setupFiles: ["./app/test/vitest.setup.ts"],
   },
 });

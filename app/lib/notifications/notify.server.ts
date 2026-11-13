@@ -46,6 +46,24 @@ export type TriggerData<K extends WorkflowKey> = WorkflowData[K] & {
   path: string;
 };
 
+/**
+ * Every field each workflow's trigger data carries, at runtime, so a test
+ * can check the Knock templates read only these (knock-templates.test.ts).
+ * The compiler keeps it equal to `TriggerData`: a field missing here, or one
+ * that isn't in the type, is an error. Add one entry per workflow.
+ */
+export const TRIGGER_DATA_FIELDS = {
+  "refund-request-decided": {
+    outcome: true,
+    courseTitle: true,
+    decisionNote: true,
+    notificationId: true,
+    path: true,
+  },
+} as const satisfies {
+  [K in WorkflowKey]: Record<keyof TriggerData<K>, true>;
+};
+
 function lookUpPeople(tx: DbExecutor, userIds: number[]) {
   if (userIds.length === 0) return [];
 
