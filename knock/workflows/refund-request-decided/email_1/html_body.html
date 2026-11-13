@@ -1,0 +1,7 @@
+{% capture headline %}{% render 'refund-request-decided-copy', part: 'headline', outcome: data.outcome, course: data.courseTitle, note: data.decisionNote %}{% endcapture %}
+{% capture detail %}{% render 'refund-request-decided-copy', part: 'detail', outcome: data.outcome, course: data.courseTitle, note: data.decisionNote %}{% endcapture %}
+<p><strong>{{ headline | escape }}</strong></p>
+<p>{{ detail | escape }}</p>
+<p><a href="{{ vars.app_url }}{{ data.path }}">Go to the course</a></p>
+<hr />
+<p><a href="{{ vars.app_url }}/settings">Manage notifications</a></p>
