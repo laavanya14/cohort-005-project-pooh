@@ -48,6 +48,7 @@ import { calculatePppPrice, getCountryTierInfo } from "~/lib/ppp";
 import { getRefundEligibility } from "~/lib/refund-requests.server";
 import { parseFormData } from "~/lib/validation";
 import { MAX_RATING, MIN_RATING } from "~/lib/ratings";
+import { getRating, rateCourse } from "~/lib/ratings.server";
 import { StarRating, StarRatingInput } from "~/components/star-rating";
 
 function getCourseBySlug(slug: string) {
@@ -294,16 +295,6 @@ type CourseRatingSummary = {
 
 const EMPTY_SUMMARY: CourseRatingSummary = { average: null, count: 0 };
 
-function findRating(userId: number, courseId: number) {
-  return db
-    .select()
-    .from(courseRatings)
-    .where(
-      and(eq(courseRatings.userId, userId), eq(courseRatings.courseId, courseId))
-    )
-    .get();
-}
-
 function getCourseRatingSummary(courseId: number): CourseRatingSummary {
   const result = db
     .select({
@@ -322,41 +313,6 @@ function getCourseRatingSummary(courseId: number): CourseRatingSummary {
     average: Math.round(result.average * 10) / 10,
     count: result.count,
   };
-}
-
-function rateCourse(userId: number, courseId: number, rating: number) {
-  if (!Number.isInteger(rating) || rating < MIN_RATING || rating > MAX_RATING) {
-    throw new Error(
-      `Rating must be a whole number between ${MIN_RATING} and ${MAX_RATING}`
-    );
-  }
-
-  const course = db
-    .select({ id: courses.id })
-    .from(courses)
-    .where(eq(courses.id, courseId))
-    .get();
-
-  if (!course) {
-    throw new Error("Course not found");
-  }
-
-  const existing = findRating(userId, courseId);
-
-  if (existing) {
-    return db
-      .update(courseRatings)
-      .set({ rating, updatedAt: new Date().toISOString() })
-      .where(eq(courseRatings.id, existing.id))
-      .returning()
-      .get();
-  }
-
-  return db
-    .insert(courseRatings)
-    .values({ userId, courseId, rating })
-    .returning()
-    .get();
 }
 
 const ratingSchema = z.object({
@@ -424,7 +380,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 
   const ratingSummary = getCourseRatingSummary(course.id);
   const userRating = currentUserId
-    ? (findRating(currentUserId, course.id)?.rating ?? null)
+    ? getRating(currentUserId, course.id)
     : null;
 
   const country = await resolveCountry(request);

@@ -5,6 +5,8 @@ import { z } from "zod";
 import type { Route } from "./+types/courses.$slug.purchase";
 import { getCurrentUserId } from "~/lib/session";
 import { db } from "~/db";
+import type { DbExecutor } from "~/db/executor";
+import { enroll } from "~/lib/enrollments.server";
 import {
   courses,
   categories,
@@ -142,48 +144,14 @@ function getEnrollmentCountForCourse(courseId: number) {
   return result?.count ?? 0;
 }
 
-function enrollUser(
-  userId: number,
-  courseId: number,
-  sendEmail: boolean,
-  skipValidation: boolean
-) {
-  if (!skipValidation) {
-    const existing = findEnrollment(userId, courseId);
-    if (existing) {
-      throw new Error("User is already enrolled in this course");
-    }
-
-    const course = db
-      .select()
-      .from(courses)
-      .where(eq(courses.id, courseId))
-      .get();
-    if (!course) {
-      throw new Error("Course not found");
-    }
-  }
-
-  const enrollment = db
-    .insert(enrollments)
-    .values({ userId, courseId })
-    .returning()
-    .get();
-
-  if (sendEmail) {
-    // Would send welcome email here
-  }
-
-  return enrollment;
-}
-
 function createPurchase(
   userId: number,
   courseId: number,
   amountPaid: number,
-  country: string | null
+  country: string | null,
+  executor: DbExecutor = db
 ) {
-  return db
+  return executor
     .insert(purchases)
     .values({ userId, courseId, amountPaid, country })
     .returning()
@@ -367,8 +335,10 @@ export async function action({ params, request }: Route.ActionArgs) {
     if (isUserEnrolled(currentUserId, course.id)) {
       throw redirect(`/courses/${slug}`);
     }
-    createPurchase(currentUserId, course.id, pppPrice, country);
-    enrollUser(currentUserId, course.id, false, false);
+    db.transaction((tx) => {
+      createPurchase(currentUserId, course.id, pppPrice, country, tx);
+      enroll(currentUserId, course.id, tx);
+    });
     throw redirect(`/courses/${slug}/welcome`);
   }
 
