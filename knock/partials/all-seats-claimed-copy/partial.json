@@ -1,0 +1,7 @@
+{
+  "key": "all-seats-claimed-copy",
+  "name": "All seats claimed: headline and detail line",
+  "description": "The headline (part: 'headline') and detail line (part: 'detail') every all-seats-claimed template shows. Takes seat_holder and course.",
+  "type": "text",
+  "content@": "content.txt"
+}

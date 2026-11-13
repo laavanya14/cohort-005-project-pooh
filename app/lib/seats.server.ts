@@ -1,8 +1,9 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "~/db";
 import type { DbExecutor } from "~/db/executor";
-import { coupons, purchases } from "~/db/schema";
+import { coupons, courses, purchases, users } from "~/db/schema";
 import { enroll, isEnrolled } from "~/lib/enrollments.server";
+import { notify } from "~/lib/notifications/notify.server";
 
 /**
  * A student claims a seat through its seat link, and is enrolled in the
@@ -67,6 +68,13 @@ export function claimSeat(
       )
       .get();
 
+    notifySeatClaimed(tx, {
+      seatHolderId: userId,
+      teamAdminId: teamLicence.userId,
+      courseId: seat.courseId,
+      wasLastAvailableSeat: !availableSeat,
+    });
+
     return {
       ok: true as const,
       seat: claimedSeat,
@@ -74,5 +82,41 @@ export function claimSeat(
       teamAdminId: teamLicence.userId,
       wasLastAvailableSeat: !availableSeat,
     };
+  });
+}
+
+/**
+ * Tells the team admin who claimed a seat on their team licence. The last
+ * available seat sends only "all seats claimed", not both.
+ */
+function notifySeatClaimed(
+  tx: DbExecutor,
+  claim: {
+    seatHolderId: number;
+    teamAdminId: number;
+    courseId: number;
+    wasLastAvailableSeat: boolean;
+  }
+) {
+  const seatHolder = tx
+    .select({ name: users.name })
+    .from(users)
+    .where(eq(users.id, claim.seatHolderId))
+    .get();
+  const course = tx
+    .select({ title: courses.title })
+    .from(courses)
+    .where(eq(courses.id, claim.courseId))
+    .get();
+  if (!seatHolder || !course) return;
+
+  notify(tx, {
+    workflowKey: claim.wasLastAvailableSeat
+      ? "all-seats-claimed"
+      : "seat-claimed",
+    actorId: claim.seatHolderId,
+    recipients: { userIds: [claim.teamAdminId] },
+    path: "/team",
+    data: { courseTitle: course.title, seatHolderName: seatHolder.name },
   });
 }
