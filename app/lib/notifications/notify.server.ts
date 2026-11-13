@@ -20,6 +20,17 @@ export type WorkflowData = {
     courseTitle: string;
     decisionNote: string | null;
   };
+  "student-top-level-comment": CommentNotificationData;
+  "instructor-or-platform-admin-reply": CommentNotificationData;
+  "student-reply": CommentNotificationData;
+};
+
+/** What every comment notification says: where, who, and what they wrote. */
+type CommentNotificationData = {
+  lessonTitle: string;
+  courseTitle: string;
+  commenterName: string;
+  commentText: string;
 };
 
 export type WorkflowKey = keyof WorkflowData;
@@ -57,6 +68,30 @@ export const TRIGGER_DATA_FIELDS = {
     outcome: true,
     courseTitle: true,
     decisionNote: true,
+    notificationId: true,
+    path: true,
+  },
+  "student-top-level-comment": {
+    lessonTitle: true,
+    courseTitle: true,
+    commenterName: true,
+    commentText: true,
+    notificationId: true,
+    path: true,
+  },
+  "instructor-or-platform-admin-reply": {
+    lessonTitle: true,
+    courseTitle: true,
+    commenterName: true,
+    commentText: true,
+    notificationId: true,
+    path: true,
+  },
+  "student-reply": {
+    lessonTitle: true,
+    courseTitle: true,
+    commenterName: true,
+    commentText: true,
     notificationId: true,
     path: true,
   },

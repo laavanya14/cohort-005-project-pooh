@@ -1,0 +1,7 @@
+{
+  "key": "instructor-or-platform-admin-reply-copy",
+  "name": "Reply from the instructor or a platform admin: headline and detail line",
+  "description": "The headline (part: 'headline') and detail line (part: 'detail') every instructor-or-platform-admin-reply template shows. Takes name, reply and lesson.",
+  "type": "text",
+  "content@": "content.txt"
+}

@@ -1,9 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { db } from "~/db";
-import { comments, lessons, modules } from "~/db/schema";
+import { comments, lessons, modules, users, UserRole } from "~/db/schema";
+import { sendNotificationJobs } from "~/lib/notifications/outbox.server";
+import { createRecordingTransport } from "~/test/recording-transport";
 import { seedBaseData } from "~/test/setup";
 import { testDb } from "~/test/test-db";
-import { createComment } from "./comments.server";
+import { createComment, deleteComment, editComment } from "./comments.server";
 
 /** A student and the instructor of a course with two lessons. */
 function seedLessons() {
@@ -24,6 +26,27 @@ function seedLessons() {
   );
 
   return { student, instructor, course, lesson, otherLesson };
+}
+
+type Seeded = ReturnType<typeof seedLessons>;
+
+function addUser(name: string, role: UserRole) {
+  return testDb()
+    .insert(users)
+    .values({
+      name,
+      email: `${name.toLowerCase().replaceAll(" ", ".")}@example.com`,
+      role,
+    })
+    .returning()
+    .get();
+}
+
+/** What Knock is asked to do when the outbox sends its waiting jobs. */
+async function sendToKnock() {
+  const knock = createRecordingTransport();
+  await sendNotificationJobs({ transport: knock });
+  return knock.triggers;
 }
 
 function commentCount() {
@@ -166,5 +189,247 @@ describe("createComment", () => {
       })
     ).toThrow("The caller's next step failed.");
     expect(commentCount()).toBe(0);
+  });
+});
+
+describe("comment notifications", () => {
+  it("tells the course's instructor about a student's top-level comment, linking to their questions page", async () => {
+    const { student, instructor, lesson } = seedLessons();
+
+    createComment(student.id, lesson.id, null, "How do I start?");
+
+    expect(await sendToKnock()).toEqual([
+      expect.objectContaining({
+        workflowKey: "student-top-level-comment",
+        recipients: [
+          {
+            id: String(instructor.id),
+            name: "Test Instructor",
+            email: "instructor@example.com",
+          },
+        ],
+        actor: expect.objectContaining({ id: String(student.id) }),
+        data: {
+          notificationId: expect.any(String),
+          path: "/instructor/questions",
+          lessonTitle: "Lesson 1",
+          courseTitle: "Test Course",
+          commenterName: "Test User",
+          commentText: "How do I start?",
+        },
+      }),
+    ]);
+  });
+
+  it.each([
+    ["the course's instructor", (seeded: Seeded) => seeded.instructor],
+    [
+      "a platform admin",
+      () => addUser("Platform Admin", UserRole.PlatformAdmin),
+    ],
+  ])("tells nobody about a top-level comment by %s", async (_, author) => {
+    const seeded = seedLessons();
+    const { lesson } = seeded;
+    const commenter = author(seeded);
+
+    createComment(commenter.id, lesson.id, null, "Welcome to the lesson.");
+
+    expect(await sendToKnock()).toEqual([]);
+  });
+
+  it.each([
+    ["the course's instructor", (seeded: Seeded) => seeded.instructor],
+    [
+      "a platform admin",
+      () => addUser("Platform Admin", UserRole.PlatformAdmin),
+    ],
+  ])(
+    "tells the comment's author about a reply from %s, linking to the reply on the lesson",
+    async (_, replier) => {
+      const seeded = seedLessons();
+      const { student, course, lesson } = seeded;
+      const answerer = replier(seeded);
+      const { comment: question } = createComment(
+        student.id,
+        lesson.id,
+        null,
+        "How do I start?"
+      );
+      await sendToKnock();
+
+      const { comment: reply } = createComment(
+        answerer.id,
+        lesson.id,
+        question.id,
+        "Open the first lesson."
+      );
+
+      expect(await sendToKnock()).toEqual([
+        expect.objectContaining({
+          workflowKey: "instructor-or-platform-admin-reply",
+          recipients: [
+            {
+              id: String(student.id),
+              name: "Test User",
+              email: "test@example.com",
+            },
+          ],
+          actor: expect.objectContaining({ id: String(answerer.id) }),
+          data: {
+            notificationId: expect.any(String),
+            path: `/courses/${course.slug}/lessons/${lesson.id}#comment-${reply.id}`,
+            lessonTitle: "Lesson 1",
+            courseTitle: "Test Course",
+            commenterName: answerer.name,
+            commentText: "Open the first lesson.",
+          },
+        }),
+      ]);
+    }
+  );
+
+  it.each([
+    [
+      "a student",
+      (seeded: Seeded) => seeded.student,
+      { name: "Test User", email: "test@example.com" },
+    ],
+    [
+      "the course's instructor",
+      (seeded: Seeded) => seeded.instructor,
+      { name: "Test Instructor", email: "instructor@example.com" },
+    ],
+    [
+      "a platform admin",
+      () => addUser("Platform Admin", UserRole.PlatformAdmin),
+      { name: "Platform Admin", email: "platform.admin@example.com" },
+    ],
+  ])(
+    "tells the comment's author, %s, about a student's reply with the inbox-only workflow",
+    async (_, author, person) => {
+      const seeded = seedLessons();
+      const { course, lesson } = seeded;
+      const commenter = author(seeded);
+      const otherStudent = addUser("Other Student", UserRole.Student);
+      const { comment: original } = createComment(
+        commenter.id,
+        lesson.id,
+        null,
+        "Here's a tip for this lesson."
+      );
+      await sendToKnock();
+
+      const { comment: reply } = createComment(
+        otherStudent.id,
+        lesson.id,
+        original.id,
+        "Thanks, that helped."
+      );
+
+      expect(await sendToKnock()).toEqual([
+        expect.objectContaining({
+          workflowKey: "student-reply",
+          recipients: [{ id: String(commenter.id), ...person }],
+          actor: expect.objectContaining({ id: String(otherStudent.id) }),
+          data: {
+            notificationId: expect.any(String),
+            path: `/courses/${course.slug}/lessons/${lesson.id}#comment-${reply.id}`,
+            lessonTitle: "Lesson 1",
+            courseTitle: "Test Course",
+            commenterName: "Other Student",
+            commentText: "Thanks, that helped.",
+          },
+        }),
+      ]);
+    }
+  );
+
+  it.each([
+    ["a student", (seeded: Seeded) => seeded.student],
+    ["the course's instructor", (seeded: Seeded) => seeded.instructor],
+    [
+      "a platform admin",
+      () => addUser("Platform Admin", UserRole.PlatformAdmin),
+    ],
+  ])("tells nobody when %s replies to their own comment", async (_, author) => {
+    const seeded = seedLessons();
+    const commenter = author(seeded);
+    const { comment: original } = createComment(
+      commenter.id,
+      seeded.lesson.id,
+      null,
+      "A note on this lesson."
+    );
+    await sendToKnock();
+
+    createComment(
+      commenter.id,
+      seeded.lesson.id,
+      original.id,
+      "One more thing."
+    );
+
+    expect(await sendToKnock()).toEqual([]);
+  });
+
+  it("tells nobody when a comment or a reply is edited", async () => {
+    const { student, instructor, lesson } = seedLessons();
+    const { comment: question } = createComment(
+      student.id,
+      lesson.id,
+      null,
+      "How do I start?"
+    );
+    const { comment: reply } = createComment(
+      instructor.id,
+      lesson.id,
+      question.id,
+      "Open the first lesson."
+    );
+    await sendToKnock();
+
+    editComment(question.id, student.id, "How do I start this lesson?");
+    editComment(
+      reply.id,
+      instructor.id,
+      "Open the first lesson, then the video."
+    );
+
+    expect(await sendToKnock()).toEqual([]);
+  });
+
+  it("tells nobody when a comment or a reply is deleted", async () => {
+    const { student, instructor, lesson } = seedLessons();
+    const { comment: question } = createComment(
+      student.id,
+      lesson.id,
+      null,
+      "How do I start?"
+    );
+    const { comment: reply } = createComment(
+      instructor.id,
+      lesson.id,
+      question.id,
+      "Open the first lesson."
+    );
+    await sendToKnock();
+
+    deleteComment(reply.id, instructor.id, true);
+    deleteComment(question.id, student.id, false);
+
+    expect(await sendToKnock()).toEqual([]);
+  });
+
+  it("tells nobody about a comment whose caller rolls back", async () => {
+    const { student, lesson } = seedLessons();
+
+    expect(() =>
+      db.transaction((tx) => {
+        createComment(student.id, lesson.id, null, "How do I start?", tx);
+        throw new Error("The caller's next step failed.");
+      })
+    ).toThrow("The caller's next step failed.");
+
+    expect(await sendToKnock()).toEqual([]);
   });
 });

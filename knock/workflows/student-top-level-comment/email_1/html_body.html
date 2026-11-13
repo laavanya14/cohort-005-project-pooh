@@ -1,0 +1,8 @@
+{% capture headline %}{% render 'student-top-level-comment-copy', part: 'headline', lesson: data.lessonTitle, student: data.commenterName, comment: data.commentText %}{% endcapture %}
+{% capture detail %}{% render 'student-top-level-comment-copy', part: 'detail', lesson: data.lessonTitle, student: data.commenterName, comment: data.commentText %}{% endcapture %}
+<p><strong>{{ headline | escape }}</strong></p>
+<p>{{ detail | escape }}</p>
+<p>{{ data.courseTitle | escape }}</p>
+<p><a href="{{ vars.app_url }}{{ data.path }}">Answer the question</a></p>
+<hr />
+<p><a href="{{ vars.app_url }}/settings">Manage notifications</a></p>

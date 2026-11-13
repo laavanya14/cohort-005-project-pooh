@@ -1,0 +1,27 @@
+{
+  "key": "student-top-level-comment",
+  "name": "A student's top-level comment",
+  "description": "Tells the course's instructor a student posted a top-level comment on one of their lessons, so they can answer it.",
+  "categories": ["waiting-on-you"],
+  "steps": [
+    {
+      "ref": "in_app_feed_1",
+      "type": "channel",
+      "channel_key": "in-app",
+      "template": {
+        "action_url": "{{ data.path }}",
+        "markdown_body@": "in_app_feed_1/markdown_body.md"
+      }
+    },
+    {
+      "ref": "email_1",
+      "type": "channel",
+      "channel_key": "postmark",
+      "template": {
+        "settings": { "layout_key": "default" },
+        "subject": "{% render 'student-top-level-comment-copy', part: 'headline', lesson: data.lessonTitle, student: data.commenterName, comment: data.commentText %}",
+        "html_body@": "email_1/html_body.html"
+      }
+    }
+  ]
+}

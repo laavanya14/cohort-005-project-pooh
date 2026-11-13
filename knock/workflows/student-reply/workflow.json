@@ -1,0 +1,17 @@
+{
+  "key": "student-reply",
+  "name": "Another student replies to your comment",
+  "description": "Tells a comment's author, whatever their role, that a student replied to their comment. Inbox only.",
+  "categories": ["about-you"],
+  "steps": [
+    {
+      "ref": "in_app_feed_1",
+      "type": "channel",
+      "channel_key": "in-app",
+      "template": {
+        "action_url": "{{ data.path }}",
+        "markdown_body@": "in_app_feed_1/markdown_body.md"
+      }
+    }
+  ]
+}
