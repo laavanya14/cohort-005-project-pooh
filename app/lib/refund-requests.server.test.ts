@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { and, eq } from "drizzle-orm";
 import {
+  coupons,
   enrollments,
   purchases,
   refundRequests,
   RefundRequestStatus,
+  teams,
   users,
   UserRole,
 } from "~/db/schema";
@@ -174,7 +176,10 @@ describe("the refund request decided notification", () => {
 
     approveRefundRequest(reviewer.id, refundRequest.id, null);
 
-    expect(await sendToKnock()).toEqual([
+    const triggers = await sendToKnock();
+    expect(
+      triggers.filter((t) => t.workflowKey === "refund-request-decided")
+    ).toEqual([
       expect.objectContaining({
         workflowKey: "refund-request-decided",
         recipients: [
@@ -311,6 +316,144 @@ describe("the refund request decided notification", () => {
 
     const [a, b] = await sendToKnock();
     expect(a.data.notificationId).not.toBe(b.data.notificationId);
+  });
+});
+
+/**
+ * A team licence for the course bought by `buyerId`, with `seats` seats,
+ * none claimed.
+ */
+function seedTeamLicence(buyerId: number, courseId: number, seats = 2) {
+  const team = testDb().insert(teams).values({}).returning().get();
+  const teamLicence = testDb()
+    .insert(purchases)
+    .values({ userId: buyerId, courseId, amountPaid: 2500 * seats })
+    .returning()
+    .get();
+
+  for (let seat = 1; seat <= seats; seat++) {
+    testDb()
+      .insert(coupons)
+      .values({
+        teamId: team.id,
+        courseId,
+        code: `SEAT-${teamLicence.id}-${seat}`,
+        purchaseId: teamLicence.id,
+      })
+      .run();
+  }
+
+  return teamLicence;
+}
+
+/** Approves the refund request and keeps only the enrollment-ended triggers. */
+async function enrollmentEndedAfterApproving(
+  reviewerId: number,
+  refundRequestId: number
+) {
+  approveRefundRequest(reviewerId, refundRequestId, null);
+  return (await sendToKnock()).filter(
+    (trigger) => trigger.workflowKey === "enrollment-ended"
+  );
+}
+
+describe("the enrollment ended notification", () => {
+  it("tells the course's instructor whose enrollment ended, opening the course's students page", async () => {
+    const { student, reviewer, course, refundRequest } =
+      seedOpenRefundRequest();
+    const instructorId = course.instructorId;
+
+    expect(
+      await enrollmentEndedAfterApproving(reviewer.id, refundRequest.id)
+    ).toEqual([
+      expect.objectContaining({
+        recipients: [
+          {
+            id: String(instructorId),
+            name: "Test Instructor",
+            email: "instructor@example.com",
+          },
+        ],
+        data: {
+          courseId: course.id,
+          courseTitle: "Test Course",
+          studentName: "Test User",
+          path: `/instructor/${course.id}/students`,
+          notificationId: expect.any(String),
+        },
+      }),
+    ]);
+    expect(isEnrolled(student.id, course.id)).toBe(false);
+  });
+
+  it("never shows the buyer's reason to the instructor", async () => {
+    const { reviewer, refundRequest } = seedOpenRefundRequest();
+
+    const [ended] = await enrollmentEndedAfterApproving(
+      reviewer.id,
+      refundRequest.id
+    );
+
+    expect(ended).toBeDefined();
+    expect(JSON.stringify(ended)).not.toContain("Not what I expected.");
+  });
+
+  it("isn't sent, and access stays, when the buyer also claimed a seat on the course", async () => {
+    const { student, reviewer, course, refundRequest } =
+      seedOpenRefundRequest();
+    const seatLicence = seedTeamLicence(reviewer.id, course.id, 1);
+    testDb()
+      .update(coupons)
+      .set({ redeemedByUserId: student.id, redeemedAt: new Date().toISOString() })
+      .where(eq(coupons.purchaseId, seatLicence.id))
+      .run();
+
+    expect(
+      await enrollmentEndedAfterApproving(reviewer.id, refundRequest.id)
+    ).toEqual([]);
+    expect(isEnrolled(student.id, course.id)).toBe(true);
+  });
+
+  it("isn't sent for a team licence, and the team admin's own enrollment stays", async () => {
+    const { student: teamAdmin, reviewer, course } = seedOpenRefundRequest();
+    const teamLicence = seedTeamLicence(teamAdmin.id, course.id);
+    const teamLicenceRequest = createRefundRequest(
+      teamLicence.id,
+      "We no longer need it."
+    );
+
+    expect(
+      await enrollmentEndedAfterApproving(reviewer.id, teamLicenceRequest.id)
+    ).toEqual([]);
+    expect(isEnrolled(teamAdmin.id, course.id)).toBe(true);
+  });
+
+  it("isn't sent when the buyer had no enrollment left to end", async () => {
+    const { student, reviewer, course, refundRequest } =
+      seedOpenRefundRequest();
+    testDb()
+      .delete(enrollments)
+      .where(
+        and(
+          eq(enrollments.userId, student.id),
+          eq(enrollments.courseId, course.id)
+        )
+      )
+      .run();
+
+    expect(
+      await enrollmentEndedAfterApproving(reviewer.id, refundRequest.id)
+    ).toEqual([]);
+  });
+
+  it("isn't sent when a decline keeps the enrollment", async () => {
+    const { reviewer, refundRequest } = seedOpenRefundRequest();
+
+    declineRefundRequest(reviewer.id, refundRequest.id, "Most lessons watched.");
+
+    expect(
+      (await sendToKnock()).map((trigger) => trigger.workflowKey)
+    ).not.toContain("enrollment-ended");
   });
 });
 

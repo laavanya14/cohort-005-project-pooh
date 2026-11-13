@@ -1,0 +1,7 @@
+{
+  "key": "new-or-changed-rating-copy",
+  "name": "New or changed rating: headline and detail line",
+  "description": "The headline (part: 'headline') and detail line (part: 'detail') of the new-or-changed-rating inbox item. Takes count (ratings in the batch), course, student and rating (the latest).",
+  "type": "text",
+  "content@": "content.txt"
+}

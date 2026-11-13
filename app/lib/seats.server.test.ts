@@ -108,6 +108,16 @@ async function sendToKnock() {
   return knock.triggers;
 }
 
+/**
+ * The seat notifications Knock is asked to send. Claiming a seat also
+ * enrolls, which tells the instructor (new-enrollment); that's left out here.
+ */
+async function seatNotificationsSent() {
+  return (await sendToKnock()).filter(
+    (trigger) => trigger.workflowKey !== "new-enrollment"
+  );
+}
+
 describe("claimSeat", () => {
   it("claims the seat for the student and enrolls them in the course", () => {
     const { student, course, seats } = seedTeamLicence();
@@ -241,7 +251,7 @@ describe("claimSeat notifications", () => {
 
     claimSeat(seats[0].code, student.id, "GB");
 
-    expect(await sendToKnock()).toEqual([
+    expect(await seatNotificationsSent()).toEqual([
       {
         workflowKey: "seat-claimed",
         idempotencyKey: expect.any(String),
@@ -273,7 +283,7 @@ describe("claimSeat notifications", () => {
 
     claimSeat(seats[1].code, lastStudent.id, "GB");
 
-    expect(await sendToKnock()).toEqual([
+    expect(await seatNotificationsSent()).toEqual([
       expect.objectContaining({
         workflowKey: "all-seats-claimed",
         recipients: [expect.objectContaining({ id: String(teamAdmin.id) })],
@@ -292,7 +302,26 @@ describe("claimSeat notifications", () => {
 
     claimSeat(seats[0].code, teamAdmin.id, "GB");
 
-    expect(await sendToKnock()).toEqual([]);
+    expect(await seatNotificationsSent()).toEqual([]);
+  });
+
+  it("also tells the course's instructor about the new enrollment", async () => {
+    const { student, course, seats } = seedTeamLicence();
+
+    claimSeat(seats[0].code, student.id, "GB");
+
+    expect(
+      (await sendToKnock()).filter(
+        (trigger) => trigger.workflowKey === "new-enrollment"
+      )
+    ).toEqual([
+      expect.objectContaining({
+        recipients: [
+          expect.objectContaining({ id: String(course.instructorId) }),
+        ],
+        data: expect.objectContaining({ courseId: course.id }),
+      }),
+    ]);
   });
 
   it("doesn't notify anyone when the claim is refused", async () => {

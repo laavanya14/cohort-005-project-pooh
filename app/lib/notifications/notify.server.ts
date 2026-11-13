@@ -20,6 +20,27 @@ export type WorkflowData = {
     courseTitle: string;
     decisionNote: string | null;
   };
+  "new-enrollment": {
+    /** Knock batches each instructor's notifications per course on this. */
+    courseId: number;
+    courseTitle: string;
+    studentName: string;
+  };
+  "new-or-changed-rating": {
+    /** Knock batches each instructor's notifications per course on this. */
+    courseId: number;
+    courseTitle: string;
+    studentName: string;
+    /** The student's new star rating, 1–5. */
+    rating: number;
+  };
+  /** Never carries the buyer's reason: that stays with the reviewers. */
+  "enrollment-ended": {
+    /** Knock batches each instructor's notifications per course on this. */
+    courseId: number;
+    courseTitle: string;
+    studentName: string;
+  };
   "seat-claimed": {
     courseTitle: string;
     seatHolderName: string;
@@ -76,6 +97,28 @@ export const TRIGGER_DATA_FIELDS = {
     outcome: true,
     courseTitle: true,
     decisionNote: true,
+    notificationId: true,
+    path: true,
+  },
+  "new-enrollment": {
+    courseId: true,
+    courseTitle: true,
+    studentName: true,
+    notificationId: true,
+    path: true,
+  },
+  "new-or-changed-rating": {
+    courseId: true,
+    courseTitle: true,
+    studentName: true,
+    rating: true,
+    notificationId: true,
+    path: true,
+  },
+  "enrollment-ended": {
+    courseId: true,
+    courseTitle: true,
+    studentName: true,
     notificationId: true,
     path: true,
   },
