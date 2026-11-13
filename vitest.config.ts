@@ -6,5 +6,6 @@ export default defineConfig({
   test: {
     globals: true,
     exclude: [...configDefaults.exclude],
+    setupFiles: ["./app/test/vitest.setup.ts"],
   },
 });
