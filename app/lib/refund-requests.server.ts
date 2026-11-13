@@ -20,6 +20,8 @@ import {
   checkRefundEligibility,
   measureCourseProgress,
 } from "~/lib/refund-requests";
+import { notify } from "~/lib/notifications/notify.server";
+import type { Database } from "~/lib/notifications/outbox.server";
 
 // The database side of refund requests. The rules themselves live in
 // refund-requests.ts; this file only gathers the facts and writes the results.
@@ -219,8 +221,9 @@ function getRefundRequest(refundRequestId: number) {
 }
 
 /**
- * Log the email for the refund request's current status. There is no mail
- * transport wired up yet.
+ * Log the email confirming the buyer raised or withdrew their refund request.
+ * There is no mail transport wired up yet. A decided refund request is a
+ * notification instead (refund-request-decided), not a logged email.
  */
 export function sendRefundRequestEmail(refundRequestId: number) {
   const request = getRefundRequest(refundRequestId);
@@ -255,6 +258,47 @@ function requireOpenRefundRequest(refundRequestId: number) {
   }
 
   return row;
+}
+
+/**
+ * Tells the buyer their refund request was decided. Cadence speaks for the
+ * reviewer, who is the actor, so they never get it themselves.
+ */
+function notifyRefundRequestDecided(
+  tx: Database,
+  reviewerId: number,
+  refundRequestId: number
+) {
+  const decided = tx
+    .select({
+      status: refundRequests.status,
+      decisionNote: refundRequests.decisionNote,
+      buyerId: purchases.userId,
+      courseTitle: courses.title,
+      courseSlug: courses.slug,
+    })
+    .from(refundRequests)
+    .innerJoin(purchases, eq(refundRequests.purchaseId, purchases.id))
+    .innerJoin(courses, eq(purchases.courseId, courses.id))
+    .where(eq(refundRequests.id, refundRequestId))
+    .get();
+
+  if (!decided) return;
+
+  notify(tx, {
+    workflowKey: "refund-request-decided",
+    actorId: reviewerId,
+    recipients: { userIds: [decided.buyerId] },
+    path: `/courses/${decided.courseSlug}`,
+    data: {
+      outcome:
+        decided.status === RefundRequestStatus.Approved
+          ? "approved"
+          : "declined",
+      courseTitle: decided.courseTitle,
+      decisionNote: decided.decisionNote,
+    },
+  });
 }
 
 /** The student closes their own open refund request. No refund is made. */
@@ -305,6 +349,8 @@ export function approveRefundRequest(
       .where(eq(refundRequests.id, refundRequestId))
       .run();
 
+    notifyRefundRequestDecided(tx, reviewerId, refundRequestId);
+
     tx.delete(enrollments)
       .where(
         and(
@@ -314,8 +360,6 @@ export function approveRefundRequest(
       )
       .run();
   });
-
-  sendRefundRequestEmail(refundRequestId);
 }
 
 /** A reviewer declines an open refund request, with a decision note. */
@@ -326,15 +370,17 @@ export function declineRefundRequest(
 ) {
   requireOpenRefundRequest(refundRequestId);
 
-  db.update(refundRequests)
-    .set({
-      status: RefundRequestStatus.Declined,
-      decidedAt: new Date().toISOString(),
-      decidedByUserId: reviewerId,
-      decisionNote,
-    })
-    .where(eq(refundRequests.id, refundRequestId))
-    .run();
+  db.transaction((tx) => {
+    tx.update(refundRequests)
+      .set({
+        status: RefundRequestStatus.Declined,
+        decidedAt: new Date().toISOString(),
+        decidedByUserId: reviewerId,
+        decisionNote,
+      })
+      .where(eq(refundRequests.id, refundRequestId))
+      .run();
 
-  sendRefundRequestEmail(refundRequestId);
+    notifyRefundRequestDecided(tx, reviewerId, refundRequestId);
+  });
 }

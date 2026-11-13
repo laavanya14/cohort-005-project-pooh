@@ -31,3 +31,6 @@
 # Generated reports. Each file is local to one machine.
 reports/
 
+# What the notification fake would have sent to Knock, in local dev.
+/.outbox/
+

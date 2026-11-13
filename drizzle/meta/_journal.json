@@ -85,6 +85,13 @@
       "when": 1794324421821,
       "tag": "0011_rename_admin_roles",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1794581218031,
+      "tag": "0012_notification_jobs",
+      "breakpoints": true
     }
   ]
 }

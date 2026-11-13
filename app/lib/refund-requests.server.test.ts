@@ -8,8 +8,10 @@ import {
   users,
   UserRole,
 } from "~/db/schema";
+import { sendNotificationJobs } from "~/lib/notifications/outbox.server";
+import { createRecordingTransport } from "~/test/recording-transport";
 import { seedBaseData } from "~/test/setup";
-import { testDb } from "~/test/test-db";
+import { resetTestDb, testDb } from "~/test/test-db";
 import {
   approveRefundRequest,
   createRefundRequest,
@@ -73,6 +75,13 @@ function isEnrolled(userId: number, courseId: number) {
       and(eq(enrollments.userId, userId), eq(enrollments.courseId, courseId))
     )
     .get();
+}
+
+/** What Knock is asked to do when the outbox sends its waiting jobs. */
+async function sendToKnock() {
+  const knock = createRecordingTransport();
+  await sendNotificationJobs({ transport: knock });
+  return knock.triggers;
 }
 
 beforeEach(() => {
@@ -156,6 +165,152 @@ describe("withdrawRefundRequest", () => {
     expect(() =>
       withdrawRefundRequest(otherStudent.id, refundRequest.id)
     ).toThrow(expect.objectContaining({ init: { status: 404 } }));
+  });
+});
+
+describe("the refund request decided notification", () => {
+  it("goes to the buyer when a reviewer approves their refund request", async () => {
+    const { student, reviewer, refundRequest } = seedOpenRefundRequest();
+
+    approveRefundRequest(reviewer.id, refundRequest.id, null);
+
+    expect(await sendToKnock()).toEqual([
+      expect.objectContaining({
+        workflowKey: "refund-request-decided",
+        recipients: [
+          {
+            id: String(student.id),
+            name: "Test User",
+            email: "test@example.com",
+          },
+        ],
+      }),
+    ]);
+  });
+
+  it("uses one workflow for both outcomes, with the outcome, course and decision note in its data", async () => {
+    const approved = seedOpenRefundRequest();
+    approveRefundRequest(
+      approved.reviewer.id,
+      approved.refundRequest.id,
+      "Sorry it wasn't a fit."
+    );
+    const [approval] = await sendToKnock();
+
+    resetTestDb();
+
+    const declined = seedOpenRefundRequest();
+    declineRefundRequest(
+      declined.reviewer.id,
+      declined.refundRequest.id,
+      "Most lessons watched."
+    );
+    const [decline] = await sendToKnock();
+
+    expect(approval).toMatchObject({
+      workflowKey: "refund-request-decided",
+      data: {
+        outcome: "approved",
+        courseTitle: "Test Course",
+        decisionNote: "Sorry it wasn't a fit.",
+        path: "/courses/test-course",
+        notificationId: expect.any(String),
+      },
+    });
+    expect(decline).toMatchObject({
+      workflowKey: "refund-request-decided",
+      data: {
+        outcome: "declined",
+        courseTitle: "Test Course",
+        decisionNote: "Most lessons watched.",
+        path: "/courses/test-course",
+        notificationId: expect.any(String),
+      },
+    });
+  });
+
+  it("never goes to the reviewer who decided it, even on their own refund request", async () => {
+    const { reviewer, course } = seedOpenRefundRequest();
+    const reviewersPurchase = testDb()
+      .insert(purchases)
+      .values({ userId: reviewer.id, courseId: course.id, amountPaid: 2500 })
+      .returning()
+      .get();
+    const reviewersRequest = createRefundRequest(
+      reviewersPurchase.id,
+      "Bought it by mistake."
+    );
+
+    declineRefundRequest(reviewer.id, reviewersRequest.id, "Policy applies.");
+
+    expect(await sendToKnock()).toEqual([]);
+  });
+
+  it("names the reviewer as the actor, and never as a recipient", async () => {
+    const { reviewer, refundRequest } = seedOpenRefundRequest();
+
+    approveRefundRequest(reviewer.id, refundRequest.id, null);
+
+    const [decided] = await sendToKnock();
+    expect(decided.actor).toEqual({
+      id: String(reviewer.id),
+      name: "Platform Admin",
+      email: "admin@example.com",
+    });
+    expect(decided.recipients.map((person) => person.id)).not.toContain(
+      String(reviewer.id)
+    );
+  });
+
+  it("isn't sent when the decision rolls back", async () => {
+    const { student, reviewer, refundRequest } = seedOpenRefundRequest();
+    // Make the approval fail partway, after the refund request is updated.
+    testDb().$client.exec(`
+      CREATE TRIGGER enrollments_cannot_be_removed BEFORE DELETE ON enrollments
+      BEGIN SELECT RAISE(ABORT, 'enrollments cannot be removed'); END;
+    `);
+
+    expect(() =>
+      approveRefundRequest(reviewer.id, refundRequest.id, null)
+    ).toThrow("enrollments cannot be removed");
+
+    expect(refundRequestOf(student.id).status).toBe(RefundRequestStatus.Open);
+    expect(await sendToKnock()).toEqual([]);
+  });
+
+  it("replaces the decided email in the server log, while withdrawing still logs its email", () => {
+    const log = vi.mocked(console.log);
+    const decided = seedOpenRefundRequest();
+    approveRefundRequest(decided.reviewer.id, decided.refundRequest.id, null);
+    expect(log).not.toHaveBeenCalledWith(expect.stringContaining("[email]"));
+
+    resetTestDb();
+
+    const withdrawn = seedOpenRefundRequest();
+    withdrawRefundRequest(withdrawn.student.id, withdrawn.refundRequest.id);
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining("subject=Refund request withdrawn")
+    );
+  });
+
+  it("gives each notification its own id", async () => {
+    const first = seedOpenRefundRequest();
+    const secondPurchase = testDb()
+      .insert(purchases)
+      .values({
+        userId: first.student.id,
+        courseId: first.course.id,
+        amountPaid: 2500,
+      })
+      .returning()
+      .get();
+    const second = createRefundRequest(secondPurchase.id, "Changed my mind.");
+
+    declineRefundRequest(first.reviewer.id, first.refundRequest.id, "No.");
+    declineRefundRequest(first.reviewer.id, second.id, "Still no.");
+
+    const [a, b] = await sendToKnock();
+    expect(a.data.notificationId).not.toBe(b.data.notificationId);
   });
 });
 

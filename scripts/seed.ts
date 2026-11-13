@@ -65,6 +65,7 @@ async function seed() {
 
   // Drop and recreate tables for a clean seed
   sqlite.exec(`
+    DROP TABLE IF EXISTS notification_jobs;
     DROP TABLE IF EXISTS comments;
     DROP TABLE IF EXISTS course_ratings;
     DROP TABLE IF EXISTS video_watch_events;
@@ -2331,6 +2332,49 @@ This course is still in draft while the cluster examples are rewritten against t
 
   console.log(`Created ${countRows(schema.refundRequests)} refund requests.`);
 
+  // ─── Notification outbox ───
+  // Every notification Knock accepted is gone from the outbox. What's left is
+  // the one Knock never accepted: the decided notification for Emma's
+  // declined refund request, marked failed 24 hours after it was saved. The
+  // retry timer leaves failed jobs alone, so nothing is sent on startup.
+
+  const declinedBuyer = students[0];
+  db.insert(schema.notificationJobs)
+    .values({
+      id: "00000000-0000-4000-8000-000000000001",
+      job: {
+        type: "trigger",
+        workflowKey: "refund-request-decided",
+        request: {
+          recipients: [
+            {
+              id: String(declinedBuyer.id),
+              name: declinedBuyer.name,
+              email: declinedBuyer.email,
+            },
+          ],
+          actor: { id: String(admin.id), name: admin.name, email: admin.email },
+          data: {
+            notificationId: "00000000-0000-4000-8000-000000000001",
+            path: `/courses/${course2.slug}`,
+            outcome: "declined",
+            courseTitle: course2.title,
+            decisionNote:
+              "This request came in after the 14-day refund window had closed.",
+          },
+        },
+      },
+      attempts: 1440,
+      createdAt: daysAgo(29),
+      nextRunAt: daysAgo(28),
+      failedAt: daysAgo(28),
+    })
+    .run();
+
+  console.log(
+    `Created ${countRows(schema.notificationJobs)} notification outbox jobs.`
+  );
+
   // ─── Teams, Team Members, and Coupons ───
   // Bossy McBossface bought 5 team seats for course 2; Olivia and Liam redeemed coupons
 
@@ -2829,6 +2873,9 @@ This course is still in draft while the cluster examples are rewritten against t
   );
   console.log(
     `  Refund requests: ${countRows(schema.refundRequests)} (${countRows(schema.refundRequests, eq(schema.refundRequests.status, RefundRequestStatus.Open))} open)`
+  );
+  console.log(
+    `  Notification outbox jobs: ${countRows(schema.notificationJobs)} (${countRows(schema.notificationJobs, isNotNull(schema.notificationJobs.failedAt))} failed)`
   );
   console.log(
     `  Teams: ${countRows(schema.teams)}, coupons: ${countRows(schema.coupons)} (${countRows(schema.coupons, isNotNull(schema.coupons.redeemedByUserId))} redeemed)`
