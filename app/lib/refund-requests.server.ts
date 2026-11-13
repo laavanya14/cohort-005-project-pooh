@@ -388,11 +388,83 @@ export function withdrawRefundRequest(
 }
 
 /**
+ * Ends the access an approved refund request's purchase gave, and tells the
+ * course's instructor (never with the buyer's reason). Nothing ends, and
+ * nobody is told, when:
+ * - the purchase is a team licence: it gave the buyer no access, and
+ *   approving it changes nobody's enrollment (ADR 0001);
+ * - the buyer claimed a seat on the course, so they keep access through it;
+ * - the buyer has no enrollment left to end.
+ */
+function endRefundedEnrollment(
+  tx: DbExecutor,
+  reviewerId: number,
+  purchase: typeof purchases.$inferSelect
+) {
+  const isTeamLicence = !!tx
+    .select({ id: coupons.id })
+    .from(coupons)
+    .where(eq(coupons.purchaseId, purchase.id))
+    .get();
+
+  const buyerClaimedSeat = !!tx
+    .select({ id: coupons.id })
+    .from(coupons)
+    .where(
+      and(
+        eq(coupons.redeemedByUserId, purchase.userId),
+        eq(coupons.courseId, purchase.courseId)
+      )
+    )
+    .get();
+
+  if (isTeamLicence || buyerClaimedSeat) return;
+
+  const { changes } = tx
+    .delete(enrollments)
+    .where(
+      and(
+        eq(enrollments.userId, purchase.userId),
+        eq(enrollments.courseId, purchase.courseId)
+      )
+    )
+    .run();
+
+  if (changes === 0) return;
+
+  const ended = tx
+    .select({
+      courseTitle: courses.title,
+      instructorId: courses.instructorId,
+      studentName: users.name,
+    })
+    .from(courses)
+    .innerJoin(users, eq(users.id, purchase.userId))
+    .where(eq(courses.id, purchase.courseId))
+    .get();
+
+  if (!ended) return;
+
+  notify(tx, {
+    workflowKey: "enrollment-ended",
+    actorId: reviewerId,
+    recipients: { userIds: [ended.instructorId] },
+    path: `/instructor/${purchase.courseId}/students`,
+    data: {
+      courseId: purchase.courseId,
+      courseTitle: ended.courseTitle,
+      studentName: ended.studentName,
+    },
+  });
+}
+
+/**
  * A reviewer approves an open refund request. The refund is the amount
  * paid, and the purchase becomes a refunded purchase: its enrollment is
- * removed, so it no longer grants access to the course. Course progress
- * is untouched, so a student who buys the course again picks up where
- * they left off.
+ * removed, so it no longer grants access to the course, unless the buyer
+ * keeps access through a claimed seat, or the purchase is a team licence
+ * (see `endRefundedEnrollment`). Course progress is untouched, so a student
+ * who buys the course again picks up where they left off.
  */
 export function approveRefundRequest(
   reviewerId: number,
@@ -416,14 +488,7 @@ export function approveRefundRequest(
     notifyRefundRequestDecided(tx, reviewerId, refundRequestId);
     archiveNewOpenRefundRequest(tx, refundRequestId);
 
-    tx.delete(enrollments)
-      .where(
-        and(
-          eq(enrollments.userId, purchase.userId),
-          eq(enrollments.courseId, purchase.courseId)
-        )
-      )
-      .run();
+    endRefundedEnrollment(tx, reviewerId, purchase);
   });
 }
 

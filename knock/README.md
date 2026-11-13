@@ -16,6 +16,7 @@ These files were written by hand. The first time someone with access pushes them
 - Each workflow has one kind in `categories`: `waiting-on-you`, `about-you` or `activity`.
 - Each workflow's headline and detail line live in one partial, `<workflow-key>-copy`, called with `part: 'headline'` or `part: 'detail'`. A partial sees only what's passed to it, never `data`.
 - The in-app body (step with `channel_key: "in-app"`) is exactly the headline render, a blank line, then the detail render. The inbox splits it back apart with `splitInboxBody` (`app/lib/notifications/inbox-copy.ts`).
+- Each `activity` workflow is in-app only, with a batch step first: `batch_key: "data.courseId"`, a fixed 1-hour window. One item per course per hour reaches the instructor when the window closes, and its partial gets `count: total_activities` to word one or many.
 - Each email (step with `channel_key: "postmark"`) ends with `<a href="{{ vars.app_url }}/settings">Manage notifications</a>`.
 
 ## Adding a workflow

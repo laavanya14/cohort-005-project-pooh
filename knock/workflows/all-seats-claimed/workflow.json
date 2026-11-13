@@ -1,0 +1,17 @@
+{
+  "key": "all-seats-claimed",
+  "name": "All seats claimed",
+  "description": "Tells the team admin the last available seat on their team licence was claimed, and by whom. Sent instead of seat-claimed for the last seat.",
+  "categories": ["about-you"],
+  "steps": [
+    {
+      "ref": "in_app_feed_1",
+      "type": "channel",
+      "channel_key": "in-app",
+      "template": {
+        "action_url": "{{ data.path }}",
+        "markdown_body@": "in_app_feed_1/markdown_body.md"
+      }
+    }
+  ]
+}

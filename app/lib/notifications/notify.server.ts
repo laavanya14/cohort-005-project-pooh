@@ -27,6 +27,46 @@ export type WorkflowData = {
     courseTitle: string;
     reason: string;
   };
+  "new-enrollment": {
+    /** Knock batches each instructor's notifications per course on this. */
+    courseId: number;
+    courseTitle: string;
+    studentName: string;
+  };
+  "new-or-changed-rating": {
+    /** Knock batches each instructor's notifications per course on this. */
+    courseId: number;
+    courseTitle: string;
+    studentName: string;
+    /** The student's new star rating, 1–5. */
+    rating: number;
+  };
+  /** Never carries the buyer's reason: that stays with the reviewers. */
+  "enrollment-ended": {
+    /** Knock batches each instructor's notifications per course on this. */
+    courseId: number;
+    courseTitle: string;
+    studentName: string;
+  };
+  "seat-claimed": {
+    courseTitle: string;
+    seatHolderName: string;
+  };
+  "all-seats-claimed": {
+    courseTitle: string;
+    seatHolderName: string;
+  };
+  "student-top-level-comment": CommentNotificationData;
+  "instructor-or-platform-admin-reply": CommentNotificationData;
+  "student-reply": CommentNotificationData;
+};
+
+/** What every comment notification says: where, who, and what they wrote. */
+type CommentNotificationData = {
+  lessonTitle: string;
+  courseTitle: string;
+  commenterName: string;
+  commentText: string;
 };
 
 export type WorkflowKey = keyof WorkflowData;
@@ -75,6 +115,64 @@ export const TRIGGER_DATA_FIELDS = {
     buyerName: true,
     courseTitle: true,
     reason: true,
+    notificationId: true,
+    path: true,
+  },
+  "new-enrollment": {
+    courseId: true,
+    courseTitle: true,
+    studentName: true,
+    notificationId: true,
+    path: true,
+  },
+  "new-or-changed-rating": {
+    courseId: true,
+    courseTitle: true,
+    studentName: true,
+    rating: true,
+    notificationId: true,
+    path: true,
+  },
+  "enrollment-ended": {
+    courseId: true,
+    courseTitle: true,
+    studentName: true,
+    notificationId: true,
+    path: true,
+  },
+  "seat-claimed": {
+    courseTitle: true,
+    seatHolderName: true,
+    notificationId: true,
+    path: true,
+  },
+  "all-seats-claimed": {
+    courseTitle: true,
+    seatHolderName: true,
+    notificationId: true,
+    path: true,
+  },
+  "student-top-level-comment": {
+    lessonTitle: true,
+    courseTitle: true,
+    commenterName: true,
+    commentText: true,
+    notificationId: true,
+    path: true,
+  },
+  "instructor-or-platform-admin-reply": {
+    lessonTitle: true,
+    courseTitle: true,
+    commenterName: true,
+    commentText: true,
+    notificationId: true,
+    path: true,
+  },
+  "student-reply": {
+    lessonTitle: true,
+    courseTitle: true,
+    commenterName: true,
+    commentText: true,
     notificationId: true,
     path: true,
   },

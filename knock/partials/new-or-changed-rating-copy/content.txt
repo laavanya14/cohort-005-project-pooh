@@ -1,0 +1,8 @@
+{%- assign n = count | plus: 0 -%}
+{%- assign stars = rating | plus: 0 -%}
+{%- if part == 'headline' -%}
+  {%- if n > 1 -%}{{ n }} new or changed ratings on {{ course | strip_newlines }}{%- else -%}New rating on {{ course | strip_newlines }}{%- endif -%}
+{%- else -%}
+  {%- if n > 1 -%}Latest: {% endif -%}
+  {{ student | strip_newlines }} rated it {{ stars }} {% if stars == 1 %}star{% else %}stars{% endif %}
+{%- endif -%}
