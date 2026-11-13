@@ -7,6 +7,7 @@ import {
   uniqueIndex,
   type AnySQLiteColumn,
 } from "drizzle-orm/sqlite-core";
+import type { NotificationJob } from "~/lib/notifications/jobs";
 
 export enum UserRole {
   Student = "student",
@@ -375,3 +376,21 @@ export const videoWatchEvents = sqliteTable("video_watch_events", {
     .notNull()
     .$defaultFn(() => new Date().toISOString()),
 });
+
+// The notification outbox. Each outgoing call to Knock is saved here in the
+// same transaction as the action that caused it, then sent, and deleted once
+// Knock accepts it. See app/lib/notifications/outbox.server.ts.
+export const notificationJobs = sqliteTable(
+  "notification_jobs",
+  {
+    // Also the idempotency key Knock sees, so a retry is never sent twice.
+    id: text("id").primaryKey(),
+    job: text("job", { mode: "json" }).notNull().$type<NotificationJob>(),
+    attempts: integer("attempts").notNull().default(0),
+    createdAt: text("created_at").notNull(),
+    nextRunAt: text("next_run_at").notNull(),
+    // Set when Knock still hadn't accepted the job 24 hours after it was saved.
+    failedAt: text("failed_at"),
+  },
+  (table) => [index("notification_jobs_next_run_idx").on(table.nextRunAt)]
+);
