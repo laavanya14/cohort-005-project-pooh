@@ -2,7 +2,8 @@ import { data } from "react-router";
 import { and, eq } from "drizzle-orm";
 import { db } from "~/db";
 import type { DbExecutor } from "~/db/executor";
-import { courseRatings, courses } from "~/db/schema";
+import { courseRatings, courses, users } from "~/db/schema";
+import { notify } from "~/lib/notifications/notify.server";
 import { MAX_RATING, MIN_RATING } from "~/lib/ratings";
 
 function findRating(userId: number, courseId: number, executor: DbExecutor) {
@@ -29,7 +30,8 @@ export type RatingChange = "new" | "changed" | "same";
 /**
  * A student rates a course, replacing any earlier rating. The one place a
  * rating is written. The result says whether the rating was new, changed, or
- * the same as before.
+ * the same as before. A new or changed rating notifies the course's
+ * instructor; the same rating again notifies nobody.
  */
 export function rateCourse(
   userId: number,
@@ -46,7 +48,12 @@ export function rateCourse(
 
   return executor.transaction((tx) => {
     const course = tx
-      .select({ id: courses.id })
+      .select({
+        id: courses.id,
+        title: courses.title,
+        slug: courses.slug,
+        instructorId: courses.instructorId,
+      })
       .from(courses)
       .where(eq(courses.id, courseId))
       .get();
@@ -56,24 +63,49 @@ export function rateCourse(
 
     const existing = findRating(userId, courseId, tx);
 
-    if (existing) {
-      const row = tx
-        .update(courseRatings)
-        .set({ rating, updatedAt: new Date().toISOString() })
-        .where(eq(courseRatings.id, existing.id))
-        .returning()
-        .get();
-      return {
-        change: existing.rating === rating ? "same" : "changed",
-        rating: row,
-      };
+    const result: {
+      change: RatingChange;
+      rating: typeof courseRatings.$inferSelect;
+    } = existing
+      ? {
+          change: existing.rating === rating ? "same" : "changed",
+          rating: tx
+            .update(courseRatings)
+            .set({ rating, updatedAt: new Date().toISOString() })
+            .where(eq(courseRatings.id, existing.id))
+            .returning()
+            .get(),
+        }
+      : {
+          change: "new",
+          rating: tx
+            .insert(courseRatings)
+            .values({ userId, courseId, rating })
+            .returning()
+            .get(),
+        };
+
+    const student = tx
+      .select({ name: users.name })
+      .from(users)
+      .where(eq(users.id, userId))
+      .get();
+
+    if (result.change !== "same" && student) {
+      notify(tx, {
+        workflowKey: "new-or-changed-rating",
+        actorId: userId,
+        recipients: { userIds: [course.instructorId] },
+        path: `/courses/${course.slug}`,
+        data: {
+          courseId: course.id,
+          courseTitle: course.title,
+          studentName: student.name,
+          rating,
+        },
+      });
     }
 
-    const row = tx
-      .insert(courseRatings)
-      .values({ userId, courseId, rating })
-      .returning()
-      .get();
-    return { change: "new", rating: row };
+    return result;
   });
 }

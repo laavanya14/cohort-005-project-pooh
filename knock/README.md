@@ -16,6 +16,7 @@ These files were written by hand. The first time someone with access pushes them
 - Each workflow has one kind in `categories`: `waiting-on-you`, `about-you` or `activity`.
 - Each workflow's headline and detail line live in one partial, `<workflow-key>-copy`, called with `part: 'headline'` or `part: 'detail'`. A partial sees only what's passed to it, never `data`.
 - The in-app body (step with `channel_key: "in-app"`) is exactly the headline render, a blank line, then the detail render. The inbox splits it back apart with `splitInboxBody` (`app/lib/notifications/inbox-copy.ts`).
+- Each `activity` workflow is in-app only, with a batch step first: `batch_key: "data.courseId"`, a fixed 1-hour window. One item per course per hour reaches the instructor when the window closes, and its partial gets `count: total_activities` to word one or many.
 - Each email (step with `channel_key: "postmark"`) ends with `<a href="{{ vars.app_url }}/settings">Manage notifications</a>`.
 
 ## Adding a workflow
@@ -51,3 +52,5 @@ npx @knocklabs/cli commit promote --to production
 ## Checking by hand
 
 With development keys in `.env`, run `npm run test:knock`, then `npm run dev`, decide a refund request at `/admin/refund-requests`, and confirm in Knock's development environment (Messages) that the buyer got an in-app message and an email.
+
+Raising a refund request sends `new-open-refund-request` to every platform admin. Deciding or withdrawing it bulk archives every copy, selected by `refundRequestId` (Knock matches the value's type too, so it's always a number). Without Knock keys, each bulk archive is written to `.outbox/bulk-archives/`.

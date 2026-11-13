@@ -1,0 +1,7 @@
+{
+  "key": "enrollment-ended-copy",
+  "name": "Enrollment ended: headline and detail line",
+  "description": "The headline (part: 'headline') and detail line (part: 'detail') of the enrollment-ended inbox item. Takes count (enrollments ended in the batch), course and student (the latest).",
+  "type": "text",
+  "content@": "content.txt"
+}

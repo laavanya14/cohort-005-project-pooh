@@ -1,0 +1,6 @@
+{%- assign n = count | plus: 0 -%}
+{%- if part == 'headline' -%}
+  {%- if n > 1 -%}{{ n }} new enrollments in {{ course | strip_newlines }}{%- else -%}New enrollment in {{ course | strip_newlines }}{%- endif -%}
+{%- else -%}
+  {%- if n > 1 -%}{{ student | strip_newlines }} and {{ n | minus: 1 }} more enrolled{%- else -%}{{ student | strip_newlines }} enrolled{%- endif -%}
+{%- endif -%}

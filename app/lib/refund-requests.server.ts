@@ -13,6 +13,7 @@ import {
   refundRequests,
   RefundRequestStatus,
   users,
+  UserRole,
   videoWatchEvents,
 } from "~/db/schema";
 import {
@@ -20,7 +21,10 @@ import {
   checkRefundEligibility,
   measureCourseProgress,
 } from "~/lib/refund-requests";
-import { notify } from "~/lib/notifications/notify.server";
+import {
+  archiveNotifications,
+  notify,
+} from "~/lib/notifications/notify.server";
 import type { DbExecutor } from "~/db/executor";
 
 // The database side of refund requests. The rules themselves live in
@@ -139,12 +143,53 @@ export function getRefundEligibility(userId: number, courseId: number) {
   return { purchase, eligibility };
 }
 
+/**
+ * The buyer raises a refund request on their purchase. Every platform admin
+ * is told there's a new open refund request, except the buyer themselves.
+ */
 export function createRefundRequest(purchaseId: number, reason: string) {
-  return db
-    .insert(refundRequests)
-    .values({ purchaseId, status: RefundRequestStatus.Open, reason })
-    .returning()
+  return db.transaction((tx) => {
+    const refundRequest = tx
+      .insert(refundRequests)
+      .values({ purchaseId, status: RefundRequestStatus.Open, reason })
+      .returning()
+      .get();
+
+    notifyNewOpenRefundRequest(tx, refundRequest.id);
+
+    return refundRequest;
+  });
+}
+
+function notifyNewOpenRefundRequest(tx: DbExecutor, refundRequestId: number) {
+  const raised = tx
+    .select({
+      reason: refundRequests.reason,
+      buyerId: users.id,
+      buyerName: users.name,
+      courseTitle: courses.title,
+    })
+    .from(refundRequests)
+    .innerJoin(purchases, eq(refundRequests.purchaseId, purchases.id))
+    .innerJoin(courses, eq(purchases.courseId, courses.id))
+    .innerJoin(users, eq(purchases.userId, users.id))
+    .where(eq(refundRequests.id, refundRequestId))
     .get();
+
+  if (!raised) return;
+
+  notify(tx, {
+    workflowKey: "new-open-refund-request",
+    actorId: raised.buyerId,
+    recipients: { role: UserRole.PlatformAdmin },
+    path: "/admin/refund-requests",
+    data: {
+      refundRequestId,
+      buyerName: raised.buyerName,
+      courseTitle: raised.courseTitle,
+      reason: raised.reason,
+    },
+  });
 }
 
 const refundRequestColumns = {
@@ -301,7 +346,22 @@ function notifyRefundRequestDecided(
   });
 }
 
-/** The student closes their own open refund request. No refund is made. */
+/**
+ * Once a refund request is decided or withdrawn, every platform admin's new
+ * open refund request for it is archived together.
+ */
+function archiveNewOpenRefundRequest(tx: DbExecutor, refundRequestId: number) {
+  archiveNotifications(tx, {
+    workflowKey: "new-open-refund-request",
+    key: "refundRequestId",
+    value: refundRequestId,
+  });
+}
+
+/**
+ * The student closes their own open refund request. No refund is made, and
+ * nobody is notified.
+ */
 export function withdrawRefundRequest(
   studentId: number,
   refundRequestId: number
@@ -312,23 +372,99 @@ export function withdrawRefundRequest(
     throw data("Refund request not found.", { status: 404 });
   }
 
-  db.update(refundRequests)
-    .set({
-      status: RefundRequestStatus.Withdrawn,
-      withdrawnAt: new Date().toISOString(),
-    })
-    .where(eq(refundRequests.id, refundRequestId))
-    .run();
+  db.transaction((tx) => {
+    tx.update(refundRequests)
+      .set({
+        status: RefundRequestStatus.Withdrawn,
+        withdrawnAt: new Date().toISOString(),
+      })
+      .where(eq(refundRequests.id, refundRequestId))
+      .run();
+
+    archiveNewOpenRefundRequest(tx, refundRequestId);
+  });
 
   sendRefundRequestEmail(refundRequestId);
 }
 
 /**
+ * Ends the access an approved refund request's purchase gave, and tells the
+ * course's instructor (never with the buyer's reason). Nothing ends, and
+ * nobody is told, when:
+ * - the purchase is a team licence: it gave the buyer no access, and
+ *   approving it changes nobody's enrollment (ADR 0001);
+ * - the buyer claimed a seat on the course, so they keep access through it;
+ * - the buyer has no enrollment left to end.
+ */
+function endRefundedEnrollment(
+  tx: DbExecutor,
+  reviewerId: number,
+  purchase: typeof purchases.$inferSelect
+) {
+  const isTeamLicence = !!tx
+    .select({ id: coupons.id })
+    .from(coupons)
+    .where(eq(coupons.purchaseId, purchase.id))
+    .get();
+
+  const buyerClaimedSeat = !!tx
+    .select({ id: coupons.id })
+    .from(coupons)
+    .where(
+      and(
+        eq(coupons.redeemedByUserId, purchase.userId),
+        eq(coupons.courseId, purchase.courseId)
+      )
+    )
+    .get();
+
+  if (isTeamLicence || buyerClaimedSeat) return;
+
+  const { changes } = tx
+    .delete(enrollments)
+    .where(
+      and(
+        eq(enrollments.userId, purchase.userId),
+        eq(enrollments.courseId, purchase.courseId)
+      )
+    )
+    .run();
+
+  if (changes === 0) return;
+
+  const ended = tx
+    .select({
+      courseTitle: courses.title,
+      instructorId: courses.instructorId,
+      studentName: users.name,
+    })
+    .from(courses)
+    .innerJoin(users, eq(users.id, purchase.userId))
+    .where(eq(courses.id, purchase.courseId))
+    .get();
+
+  if (!ended) return;
+
+  notify(tx, {
+    workflowKey: "enrollment-ended",
+    actorId: reviewerId,
+    recipients: { userIds: [ended.instructorId] },
+    path: `/instructor/${purchase.courseId}/students`,
+    data: {
+      courseId: purchase.courseId,
+      courseTitle: ended.courseTitle,
+      studentName: ended.studentName,
+    },
+  });
+}
+
+/**
  * A reviewer approves an open refund request. The refund is the amount
  * paid, and the purchase becomes a refunded purchase: its enrollment is
- * removed, so it no longer grants access to the course. Course progress
- * is untouched, so a student who buys the course again picks up where
- * they left off.
+ * removed, so it no longer grants access to the course, unless the buyer
+ * keeps access through a claimed seat, or the purchase is a team licence
+ * (see `endRefundedEnrollment`). Course progress is untouched, so a student
+ * who buys the course again picks up where they left off.
  */
 export function approveRefundRequest(
   reviewerId: number,
@@ -350,15 +486,9 @@ export function approveRefundRequest(
       .run();
 
     notifyRefundRequestDecided(tx, reviewerId, refundRequestId);
+    archiveNewOpenRefundRequest(tx, refundRequestId);
 
-    tx.delete(enrollments)
-      .where(
-        and(
-          eq(enrollments.userId, purchase.userId),
-          eq(enrollments.courseId, purchase.courseId)
-        )
-      )
-      .run();
+    endRefundedEnrollment(tx, reviewerId, purchase);
   });
 }
 
@@ -382,5 +512,6 @@ export function declineRefundRequest(
       .run();
 
     notifyRefundRequestDecided(tx, reviewerId, refundRequestId);
+    archiveNewOpenRefundRequest(tx, refundRequestId);
   });
 }

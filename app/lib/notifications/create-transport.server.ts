@@ -14,5 +14,8 @@ export function createNotificationTransport(
   const { knock } = readNotificationConfig(env);
   if (!knock) return createFileTransport();
 
-  return createKnockTransport({ secretKey: knock.secretKey });
+  return createKnockTransport({
+    secretKey: knock.secretKey,
+    inAppChannelId: knock.inAppChannelId,
+  });
 }

@@ -42,7 +42,7 @@ async function inboxItems(secretKey: string, channelId: string) {
 describe.skipIf(!knock)("Knock's development environment", () => {
   it("puts a decided refund request in the buyer's inbox, with its headline and detail line", async () => {
     if (!knock) return;
-    const transport = createKnockTransport({ secretKey: knock.secretKey });
+    const transport = createKnockTransport(knock);
     const notificationId = randomUUID();
 
     await transport.trigger(
@@ -79,4 +79,60 @@ describe.skipIf(!knock)("Knock's development environment", () => {
       detail: 'Intro to Testing · "Within the refund window."',
     });
   });
+
+  it("archives a new open refund request by its refundRequestId", async () => {
+    if (!knock) return;
+    const transport = createKnockTransport(knock);
+    const notificationId = randomUUID();
+    // Unique per run, so earlier runs' copies don't match.
+    const refundRequestId = Date.now();
+
+    await transport.trigger(
+      "new-open-refund-request",
+      {
+        recipients: [testUser],
+        actor: testReviewer,
+        data: {
+          refundRequestId,
+          buyerName: "Cadence Test Reviewer",
+          courseTitle: "Intro to Testing",
+          reason: "Bought it twice.",
+          notificationId,
+          path: "/admin/refund-requests",
+        },
+      },
+      { idempotencyKey: notificationId }
+    );
+
+    const arrived = await waitFor(async () =>
+      (await inboxItems(knock.secretKey, knock.inAppChannelId)).find(
+        (i) => i.data?.notificationId === notificationId
+      )
+    );
+    expect(arrived?.source.categories).toContain("waiting-on-you");
+
+    await transport.bulkArchive({
+      workflowKey: "new-open-refund-request",
+      key: "refundRequestId",
+      value: refundRequestId,
+    });
+
+    // Bulk operations run asynchronously too. Archived items leave the feed.
+    const gone = await waitFor(async () =>
+      (await inboxItems(knock.secretKey, knock.inAppChannelId)).every(
+        (i) => i.data?.notificationId !== notificationId
+      ) || undefined
+    );
+    expect(gone).toBe(true);
+  });
 });
+
+/** Polls once a second for up to 20 seconds until `check` finds something. */
+async function waitFor<T>(check: () => Promise<T | undefined>) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const found = await check();
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}

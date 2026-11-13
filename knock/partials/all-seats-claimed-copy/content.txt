@@ -1,0 +1,5 @@
+{%- if part == 'headline' -%}
+  All seats claimed
+{%- else -%}
+  {{ seat_holder | strip_newlines }} claimed the last seat on {{ course | strip_newlines }}
+{%- endif -%}

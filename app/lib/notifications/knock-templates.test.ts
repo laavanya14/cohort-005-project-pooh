@@ -19,6 +19,7 @@ type Step = {
   ref: string;
   type: string;
   channel_key?: string;
+  settings?: Record<string, unknown>;
   template?: Record<string, unknown>;
 };
 
@@ -93,6 +94,9 @@ const repoKeys = readdirSync(workflowsDir).filter((entry) =>
   existsSync(path.join(workflowsDir, entry, "workflow.json"))
 );
 const kinds = ["waiting-on-you", "about-you", "activity"];
+const activityKeys = repoKeys.filter((key) =>
+  readWorkflow(key).categories?.includes("activity")
+);
 
 describe("the Knock templates kept in the repo", () => {
   it.each(triggeredKeys)(
@@ -113,6 +117,13 @@ describe("the Knock templates kept in the repo", () => {
       expect(used.filter((field) => !sent.includes(field))).toEqual([]);
     }
   );
+
+  it("puts a new open refund request in Waiting on you, inbox only until browser push", () => {
+    const workflow = readWorkflow("new-open-refund-request");
+
+    expect(workflow.categories).toContain("waiting-on-you");
+    expect(workflow.steps.map((step) => step.channel_key)).toEqual(["in-app"]);
+  });
 
   it.each(repoKeys)("tags %s with exactly one kind", (key) => {
     const { categories = [] } = readWorkflow(key);
@@ -144,6 +155,29 @@ describe("the Knock templates kept in the repo", () => {
       );
     }
   );
+
+  it.each(activityKeys)(
+    "sends %s to the inbox only, batched into one item per course per hour",
+    (key) => {
+      const steps = readWorkflow(key).steps;
+
+      expect(steps.map((step) => step.type)).toEqual(["batch", "channel"]);
+      expect(steps[1]?.channel_key).toBe("in-app");
+      expect(steps[0]?.settings).toMatchObject({
+        batch_key: "data.courseId",
+        batch_window: { unit: "hours", value: 1 },
+        batch_window_type: "fixed",
+      });
+    }
+  );
+
+  it("has the three Activity workflows", () => {
+    expect([...activityKeys].sort()).toEqual([
+      "enrollment-ended",
+      "new-enrollment",
+      "new-or-changed-rating",
+    ]);
+  });
 
   it.each(repoKeys)(
     "ends every %s email with a Manage notifications link to Settings",

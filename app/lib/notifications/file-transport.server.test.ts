@@ -56,4 +56,28 @@ describe("the file-writing notification fake", () => {
       data: { outcome: "declined", path: "/courses/test-course" },
     });
   });
+
+  it("writes one JSON file per bulk archive, named by time and workflow key", async () => {
+    const archivesDir = path.join(outboxDir(), "bulk-archives");
+    const transport = createFileTransport({ archivesDir });
+
+    await transport.bulkArchive({
+      workflowKey: "new-open-refund-request",
+      key: "refundRequestId",
+      value: 7,
+    });
+
+    const files = readdirSync(archivesDir);
+    expect(files).toHaveLength(1);
+    expect(files[0]).toMatch(
+      /^\d{4}-\d{2}-\d{2}T[\d-]+Z-new-open-refund-request\.json$/
+    );
+    expect(
+      JSON.parse(readFileSync(path.join(archivesDir, files[0]), "utf8"))
+    ).toEqual({
+      workflowKey: "new-open-refund-request",
+      key: "refundRequestId",
+      value: 7,
+    });
+  });
 });
