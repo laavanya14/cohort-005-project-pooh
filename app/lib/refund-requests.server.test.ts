@@ -53,6 +53,16 @@ function seedOpenRefundRequest() {
   return { student, reviewer, course, refundRequest };
 }
 
+type OpenRefundRequest = ReturnType<typeof seedOpenRefundRequest>;
+
+function buyPurchase(userId: number, courseId: number) {
+  return testDb()
+    .insert(purchases)
+    .values({ userId, courseId, amountPaid: 2500 })
+    .returning()
+    .get();
+}
+
 function refundRequestOf(studentId: number) {
   const [request] = listRefundRequestsForStudent(studentId);
   return request;
@@ -81,7 +91,21 @@ function isEnrolled(userId: number, courseId: number) {
 async function sendToKnock() {
   const knock = createRecordingTransport();
   await sendNotificationJobs({ transport: knock });
-  return knock.triggers;
+  return knock;
+}
+
+/** The workflows of one kind Knock is asked to run. */
+async function triggersOf(workflowKey: string) {
+  const knock = await sendToKnock();
+  return knock.triggers.filter((t) => t.workflowKey === workflowKey);
+}
+
+function addPlatformAdmin(name: string, email: string) {
+  return testDb()
+    .insert(users)
+    .values({ name, email, role: UserRole.PlatformAdmin })
+    .returning()
+    .get();
 }
 
 beforeEach(() => {
@@ -150,6 +174,16 @@ describe("withdrawRefundRequest", () => {
     expect(isEnrolled(student.id, course.id)).toBe(true);
   });
 
+  it("notifies nobody: not the buyer, the platform admins or the instructor", async () => {
+    const { student, refundRequest } = seedOpenRefundRequest();
+    addPlatformAdmin("Second Admin", "second@example.com");
+    await sendToKnock();
+
+    withdrawRefundRequest(student.id, refundRequest.id);
+
+    expect((await sendToKnock()).triggers).toEqual([]);
+  });
+
   it("refuses another student's refund request as not found", () => {
     const { refundRequest } = seedOpenRefundRequest();
     const otherStudent = testDb()
@@ -174,7 +208,7 @@ describe("the refund request decided notification", () => {
 
     approveRefundRequest(reviewer.id, refundRequest.id, null);
 
-    expect(await sendToKnock()).toEqual([
+    expect(await triggersOf("refund-request-decided")).toEqual([
       expect.objectContaining({
         workflowKey: "refund-request-decided",
         recipients: [
@@ -195,7 +229,7 @@ describe("the refund request decided notification", () => {
       approved.refundRequest.id,
       "Sorry it wasn't a fit."
     );
-    const [approval] = await sendToKnock();
+    const [approval] = await triggersOf("refund-request-decided");
 
     resetTestDb();
 
@@ -205,7 +239,7 @@ describe("the refund request decided notification", () => {
       declined.refundRequest.id,
       "Most lessons watched."
     );
-    const [decline] = await sendToKnock();
+    const [decline] = await triggersOf("refund-request-decided");
 
     expect(approval).toMatchObject({
       workflowKey: "refund-request-decided",
@@ -243,7 +277,7 @@ describe("the refund request decided notification", () => {
 
     declineRefundRequest(reviewer.id, reviewersRequest.id, "Policy applies.");
 
-    expect(await sendToKnock()).toEqual([]);
+    expect(await triggersOf("refund-request-decided")).toEqual([]);
   });
 
   it("names the reviewer as the actor, and never as a recipient", async () => {
@@ -251,7 +285,7 @@ describe("the refund request decided notification", () => {
 
     approveRefundRequest(reviewer.id, refundRequest.id, null);
 
-    const [decided] = await sendToKnock();
+    const [decided] = await triggersOf("refund-request-decided");
     expect(decided.actor).toEqual({
       id: String(reviewer.id),
       name: "Platform Admin",
@@ -275,7 +309,7 @@ describe("the refund request decided notification", () => {
     ).toThrow("enrollments cannot be removed");
 
     expect(refundRequestOf(student.id).status).toBe(RefundRequestStatus.Open);
-    expect(await sendToKnock()).toEqual([]);
+    expect(await triggersOf("refund-request-decided")).toEqual([]);
   });
 
   it("replaces the decided email in the server log, while withdrawing still logs its email", () => {
@@ -309,9 +343,119 @@ describe("the refund request decided notification", () => {
     declineRefundRequest(first.reviewer.id, first.refundRequest.id, "No.");
     declineRefundRequest(first.reviewer.id, second.id, "Still no.");
 
-    const [a, b] = await sendToKnock();
+    const [a, b] = await triggersOf("refund-request-decided");
     expect(a.data.notificationId).not.toBe(b.data.notificationId);
   });
+});
+
+describe("the new open refund request notification", () => {
+  /** A buyer of the course, not yet asking for a refund, and two platform admins. */
+  function seedPurchaseAndAdmins() {
+    const { user: buyer, course } = seedBaseData(testDb());
+    const firstAdmin = addPlatformAdmin("First Admin", "first@example.com");
+    const secondAdmin = addPlatformAdmin("Second Admin", "second@example.com");
+    const purchase = buyPurchase(buyer.id, course.id);
+    return { buyer, course, purchase, firstAdmin, secondAdmin };
+  }
+
+  it("goes to every platform admin when a buyer raises a refund request", async () => {
+    const { buyer, purchase, firstAdmin, secondAdmin } =
+      seedPurchaseAndAdmins();
+
+    const raised = createRefundRequest(purchase.id, "Bought it twice.");
+
+    const [notification] = await triggersOf("new-open-refund-request");
+    expect(notification).toMatchObject({
+      actor: { id: String(buyer.id), name: "Test User" },
+      data: {
+        refundRequestId: raised.id,
+        buyerName: "Test User",
+        courseTitle: "Test Course",
+        reason: "Bought it twice.",
+        path: "/admin/refund-requests",
+        notificationId: expect.any(String),
+      },
+    });
+    expect(notification.recipients).toEqual([
+      { id: String(firstAdmin.id), name: "First Admin", email: "first@example.com" },
+      { id: String(secondAdmin.id), name: "Second Admin", email: "second@example.com" },
+    ]);
+  });
+
+  it("doesn't go to a platform admin who raises a refund request on their own purchase", async () => {
+    const { course, firstAdmin, secondAdmin } = seedPurchaseAndAdmins();
+    const adminsPurchase = buyPurchase(firstAdmin.id, course.id);
+
+    createRefundRequest(adminsPurchase.id, "Bought it by mistake.");
+
+    const [notification] = await triggersOf("new-open-refund-request");
+    expect(notification.recipients.map((person) => person.id)).toEqual([
+      String(secondAdmin.id),
+    ]);
+  });
+});
+
+describe("archiving every platform admin's new open refund request", () => {
+  const closings = [
+    [
+      "a reviewer approves it",
+      ({ reviewer, refundRequest }: OpenRefundRequest) =>
+        approveRefundRequest(reviewer.id, refundRequest.id, null),
+    ],
+    [
+      "a reviewer declines it",
+      ({ reviewer, refundRequest }: OpenRefundRequest) =>
+        declineRefundRequest(reviewer.id, refundRequest.id, "Policy applies."),
+    ],
+    [
+      "the buyer withdraws it",
+      ({ student, refundRequest }: OpenRefundRequest) =>
+        withdrawRefundRequest(student.id, refundRequest.id),
+    ],
+  ] as const;
+
+  it.each(closings)(
+    "archives every copy, selected by refundRequestId, once %s",
+    async (_, close) => {
+      const open = seedOpenRefundRequest();
+      await sendToKnock();
+
+      close(open);
+
+      const knock = await sendToKnock();
+      expect(knock.archives).toEqual([
+        {
+          workflowKey: "new-open-refund-request",
+          key: "refundRequestId",
+          value: open.refundRequest.id,
+        },
+      ]);
+    }
+  );
+
+  it.each(closings)(
+    "archives only after Knock accepts the notification, when %s before it reached Knock",
+    async (_, close) => {
+      const knock = createRecordingTransport();
+      const open = seedOpenRefundRequest();
+      close(open);
+      const start = new Date();
+
+      // Knock is down for the new open refund request's trigger.
+      knock.failNext();
+      await sendNotificationJobs({ transport: knock, now: start });
+      expect(knock.archives).toEqual([]);
+
+      await sendNotificationJobs({
+        transport: knock,
+        now: new Date(start.getTime() + 2 * 60 * 1000),
+      });
+      const aboutThisRequest = knock.calls
+        .filter((call) => call.workflowKey === "new-open-refund-request")
+        .map((call) => call.method);
+      expect(aboutThisRequest).toEqual(["trigger", "bulkArchive"]);
+    }
+  );
 });
 
 describe("a refund request that isn't open", () => {

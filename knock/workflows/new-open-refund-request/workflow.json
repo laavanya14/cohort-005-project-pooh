@@ -1,0 +1,17 @@
+{
+  "key": "new-open-refund-request",
+  "name": "New open refund request",
+  "description": "Tells every platform admin a buyer raised a refund request. Every copy is archived together once a reviewer decides it or the buyer withdraws it (selected by data.refundRequestId).",
+  "categories": ["waiting-on-you"],
+  "steps": [
+    {
+      "ref": "in_app_feed_1",
+      "type": "channel",
+      "channel_key": "in-app",
+      "template": {
+        "action_url": "{{ data.path }}",
+        "markdown_body@": "in_app_feed_1/markdown_body.md"
+      }
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+{%- if part == 'headline' -%}
+  New refund request
+{%- else -%}
+  {{ buyer | strip_newlines }} · {{ course | strip_newlines }}: "{{ reason | strip_newlines | truncate: 100 }}"
+{%- endif -%}

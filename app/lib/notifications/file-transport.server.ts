@@ -17,18 +17,27 @@ function uniqueTimestamp() {
   return new Date(lastStamp).toISOString().replace(/[:.]/g, "-");
 }
 
+async function writeJson(dir: string, name: string, contents: unknown) {
+  await mkdir(dir, { recursive: true });
+  const file = path.join(dir, `${uniqueTimestamp()}-${name}.json`);
+  await writeFile(file, `${JSON.stringify(contents, null, 2)}\n`);
+}
+
 export function createFileTransport({
   notificationsDir = path.join(OUTBOX_DIR, "notifications"),
-}: { notificationsDir?: string } = {}): NotificationTransport {
+  archivesDir = path.join(OUTBOX_DIR, "bulk-archives"),
+}: { notificationsDir?: string; archivesDir?: string } = {}): NotificationTransport {
   return {
     async trigger(workflowKey, request, { idempotencyKey }) {
-      await mkdir(notificationsDir, { recursive: true });
-      const file = path.join(
-        notificationsDir,
-        `${uniqueTimestamp()}-${workflowKey}.json`
-      );
-      const contents = { workflowKey, idempotencyKey, ...request };
-      await writeFile(file, `${JSON.stringify(contents, null, 2)}\n`);
+      await writeJson(notificationsDir, workflowKey, {
+        workflowKey,
+        idempotencyKey,
+        ...request,
+      });
+    },
+
+    async bulkArchive(selector) {
+      await writeJson(archivesDir, selector.workflowKey, selector);
     },
   };
 }

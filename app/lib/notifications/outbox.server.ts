@@ -1,15 +1,25 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, isNull, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, lte, sql } from "drizzle-orm";
 import { db } from "~/db";
 import type { DbExecutor } from "~/db/executor";
 import { notificationJobs } from "~/db/schema";
 import { describeJob, performJob, type NotificationJob } from "./jobs";
-import type { NotificationTransport } from "./transport";
+import type {
+  InAppMessageSelector,
+  NotificationTransport,
+} from "./transport";
 
 // The notification outbox. A job is saved in the same transaction as the
 // action that caused it, so an action that rolls back sends nothing. The
 // outbox then sends it, deleting it once Knock accepts it. The action never
 // waits on Knock and never fails because of it.
+//
+// Ordering: a bulk archive waits for the trigger that creates the copies it
+// archives. When it is saved while a matching trigger is still waiting in the
+// outbox, it holds that trigger's id in `afterJobId` and isn't sent until
+// Knock has accepted the trigger (or the trigger was marked failed, leaving
+// nothing to archive). So a refund request decided or withdrawn before its
+// notification reached Knock still ends up archived.
 
 /** How long a job Knock didn't accept waits before it is tried again. */
 const RETRY_DELAY_MS = 60 * 1000;
@@ -33,10 +43,51 @@ export function enqueueNotificationJob(
   const now = (
     outboxGlobal.__cadenceNotificationOutbox?.clock() ?? new Date()
   ).toISOString();
+  const afterJobId =
+    job.type === "bulkArchive"
+      ? waitingTriggerFor(tx, job.selector)
+      : undefined;
+
   tx.insert(notificationJobs)
-    .values({ id, job, createdAt: now, nextRunAt: now })
+    .values({ id, job, createdAt: now, nextRunAt: now, afterJobId })
     .run();
   return id;
+}
+
+/**
+ * The id of the newest trigger still waiting in the outbox whose in-app
+ * copies the selector would pick, if there is one. Matches the trigger-data
+ * value exactly, including its type, as Knock does.
+ */
+function waitingTriggerFor(tx: DbExecutor, selector: InAppMessageSelector) {
+  const dataPath = `$.request.data.${selector.key}`;
+
+  return tx
+    .select({ id: notificationJobs.id })
+    .from(notificationJobs)
+    .where(
+      and(
+        isNull(notificationJobs.failedAt),
+        sql`json_extract(${notificationJobs.job}, '$.type') = 'trigger'`,
+        sql`json_extract(${notificationJobs.job}, '$.workflowKey') = ${selector.workflowKey}`,
+        sql`json_extract(${notificationJobs.job}, ${dataPath}) = ${selector.value}`
+      )
+    )
+    .orderBy(desc(notificationJobs.createdAt), desc(sql`rowid`))
+    .get()?.id;
+}
+
+/** Whether the job's `afterJobId` job is still waiting for Knock to accept it. */
+function isHeldBack(afterJobId: string | null) {
+  if (!afterJobId) return false;
+
+  return !!db
+    .select({ id: notificationJobs.id })
+    .from(notificationJobs)
+    .where(
+      and(eq(notificationJobs.id, afterJobId), isNull(notificationJobs.failedAt))
+    )
+    .get();
 }
 
 /**
@@ -67,6 +118,9 @@ export async function sendNotificationJobs({
   for (const row of due) {
     // An immediate send and the timer can overlap. Only one of them sends.
     if (inFlight.has(row.id)) continue;
+    // Checked now, not when the due jobs were read: the job it waits for may
+    // have been accepted earlier in this same pass.
+    if (isHeldBack(row.afterJobId)) continue;
     inFlight.add(row.id);
 
     try {

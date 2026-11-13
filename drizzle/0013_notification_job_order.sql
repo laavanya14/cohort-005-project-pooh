@@ -1,0 +1,1 @@
+ALTER TABLE `notification_jobs` ADD `after_job_id` text;
