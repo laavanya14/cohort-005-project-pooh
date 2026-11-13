@@ -42,6 +42,8 @@ interface SidebarProps {
   currentUser: CurrentUser | null;
   recentCourses?: RecentCourse[];
   isTeamAdmin?: boolean;
+  /** Shown at the top of the navigation: the Inbox item. */
+  inbox?: React.ReactNode;
 }
 
 interface NavItem {
@@ -118,6 +120,7 @@ export function Sidebar({
   currentUser,
   recentCourses = [],
   isTeamAdmin = false,
+  inbox,
 }: SidebarProps) {
   const currentUserRole = currentUser?.role ?? null;
   const [isDark, setIsDark] = useState(false);
@@ -143,7 +146,8 @@ export function Sidebar({
         </NavLink>
       </div>
 
-      <nav className="flex-1 space-y-1 p-3">
+      <nav className="flex-1 space-y-1 overflow-y-auto p-3">
+        {inbox}
         {navItems
           .filter((item) => isVisible(item, currentUserRole))
           .map((item) => (
