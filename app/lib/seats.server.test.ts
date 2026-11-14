@@ -265,6 +265,7 @@ describe("claimSeat notifications", () => {
         actor: expect.objectContaining({ id: String(student.id) }),
         data: {
           notificationId: expect.any(String),
+          pushPath: expect.any(String),
           path: "/team",
           courseTitle: course.title,
           seatHolderName: student.name,
@@ -289,6 +290,7 @@ describe("claimSeat notifications", () => {
         recipients: [expect.objectContaining({ id: String(teamAdmin.id) })],
         data: {
           notificationId: expect.any(String),
+          pushPath: expect.any(String),
           path: "/team",
           courseTitle: course.title,
           seatHolderName: "last@example.com",

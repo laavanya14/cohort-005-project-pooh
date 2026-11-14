@@ -1,6 +1,7 @@
 import type {
   InAppMessageSelector,
   NotificationTransport,
+  RecipientMessageSelector,
   TriggerRequest,
 } from "./transport";
 
@@ -17,6 +18,10 @@ export type NotificationJob =
   | {
       type: "bulkArchive";
       selector: InAppMessageSelector;
+    }
+  | {
+      type: "bulkMarkRead";
+      selector: RecipientMessageSelector;
     }
   | {
       /**
@@ -42,6 +47,8 @@ export function describeJob(job: NotificationJob) {
       return `the ${job.workflowKey} trigger`;
     case "bulkArchive":
       return `the bulk archive of ${job.selector.workflowKey} by ${job.selector.key} ${job.selector.value}`;
+    case "bulkMarkRead":
+      return `the bulk mark read of person ${job.selector.recipientId}'s copies by ${job.selector.key} ${job.selector.value}`;
     case "setPushTokens":
       return `the push tokens of person ${job.userId}`;
   }
@@ -61,6 +68,8 @@ export function performJob(
       });
     case "bulkArchive":
       return transport.bulkArchive(job.selector);
+    case "bulkMarkRead":
+      return transport.bulkMarkRead(job.selector);
     case "setPushTokens":
       return transport.setPushTokens(
         String(job.userId),

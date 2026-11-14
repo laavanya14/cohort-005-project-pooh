@@ -45,8 +45,10 @@ export async function action({ request }: Route.ActionArgs) {
     registrationId: await getPushRegistrationId(request),
   });
 
+  // The browser remembers `userId` turned on push there, to register them
+  // again when they sign back in.
   return data(
-    { registrationId },
+    { registrationId, userId },
     {
       headers: {
         "Set-Cookie": await setPushRegistrationId(request, registrationId),

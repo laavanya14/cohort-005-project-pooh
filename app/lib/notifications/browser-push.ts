@@ -1,4 +1,6 @@
+import { z } from "zod";
 import type { BrowserPushConfig } from "./firebase-config";
+import { rememberPushTurnedOnHere } from "./push-turned-on-here";
 
 // Browser push in this browser, from the browser's side. Firebase is loaded
 // only when one of these runs (they're called from taps and effects), so it
@@ -84,8 +86,9 @@ async function firebaseMessaging(config: BrowserPushConfig) {
  * tap: if the browser hasn't been asked yet, it shows the browser's prompt.
  * It registers Cadence's service worker, asks Firebase for this browser's
  * token (`getToken`), and sends it to Cadence's server, which stores it and
- * keeps the registration's id in the session. Rejects when Firebase or
- * Cadence's server fails.
+ * keeps the registration's id in the session. The browser then remembers
+ * that this person turned on push here. Rejects when Firebase or Cadence's
+ * server fails.
  */
 export async function registerBrowserForPush(
   config: BrowserPushConfig
@@ -99,16 +102,41 @@ export async function registerBrowserForPush(
   if (permission === "denied") return { outcome: "blocked" };
   if (permission === "default") return { outcome: "dismissed" };
 
+  const registrationId = await sendPushToken(await browserPushToken(config));
+  return { outcome: "registered", registrationId };
+}
+
+/**
+ * This browser's token from Firebase (`getToken`), registering Cadence's
+ * service worker. Only call it once permission is granted, or the browser
+ * prompts.
+ */
+export async function browserPushToken(config: BrowserPushConfig) {
+  // A token still being deleted (someone signed out or was switched away
+  // from) would invalidate the one about to be fetched.
+  await pendingTokenDeletion;
   const serviceWorkerRegistration = await navigator.serviceWorker.register(
     SERVICE_WORKER_PATH,
     { scope: "/" }
   );
   const { getToken } = await import("firebase/messaging");
-  const token = await getToken(await firebaseMessaging(config), {
+  return getToken(await firebaseMessaging(config), {
     vapidKey: config.vapidKey,
     serviceWorkerRegistration,
   });
+}
 
+const pushRegistrationResponseSchema = z.object({
+  registrationId: z.number(),
+  userId: z.number(),
+});
+
+/**
+ * Sends this browser's token to Cadence's server for the person signed in.
+ * The server saves it, or marks the browser seen, and returns the
+ * registration's id. Remembers that this person turned on push here.
+ */
+export async function sendPushToken(token: string) {
   const response = await fetch(PUSH_REGISTRATION_PATH, {
     method: "POST",
     body: new URLSearchParams({ token }),
@@ -116,25 +144,29 @@ export async function registerBrowserForPush(
   if (!response.ok) {
     throw new Error(`Cadence answered ${response.status} to the push token.`);
   }
-  const body: unknown = await response.json();
-  if (
-    !body ||
-    typeof body !== "object" ||
-    !("registrationId" in body) ||
-    typeof body.registrationId !== "number"
-  ) {
+  const body = pushRegistrationResponseSchema.safeParse(await response.json());
+  if (!body.success) {
     throw new Error("Cadence didn't return a push registration id.");
   }
 
-  return { outcome: "registered", registrationId: body.registrationId };
+  rememberPushTurnedOnHere(body.data.userId);
+  return body.data.registrationId;
 }
+
+/** The `deleteToken` call still running, if any. */
+let pendingTokenDeletion: Promise<void> = Promise.resolve();
 
 /**
  * Asks Firebase to delete this browser's token, when someone signs out or
  * is switched away from. Cadence's server already removes the registration
  * from the session, so this is a best effort: it never rejects.
  */
-export async function forgetBrowserPushToken(config: BrowserPushConfig) {
+export function forgetBrowserPushToken(config: BrowserPushConfig) {
+  pendingTokenDeletion = deleteBrowserPushToken(config);
+  return pendingTokenDeletion;
+}
+
+async function deleteBrowserPushToken(config: BrowserPushConfig) {
   try {
     if (browserPushPermission() !== "granted") return;
     if (!(await canUseBrowserPush())) return;

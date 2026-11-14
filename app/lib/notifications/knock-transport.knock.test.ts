@@ -23,6 +23,7 @@ const testReviewer = {
 };
 
 type FeedItem = {
+  read_at: string | null;
   data: Record<string, unknown> | null;
   source: { key: string; categories: string[] };
   blocks: { name: string; type: string; content?: string }[];
@@ -125,6 +126,48 @@ describe.skipIf(!knock)("Knock's development environment", () => {
       ) || undefined
     );
     expect(gone).toBe(true);
+  });
+
+  it("marks read only the person's copy picked by its notificationId, as a push click does", async () => {
+    if (!knock) return;
+    const transport = createKnockTransport(knock);
+    const notificationId = randomUUID();
+
+    await transport.trigger(
+      "refund-request-decided",
+      {
+        recipients: [testUser],
+        actor: testReviewer,
+        data: {
+          outcome: "declined",
+          courseTitle: "Intro to Testing",
+          decisionNote: "Outside the refund window.",
+          notificationId,
+          path: "/courses/intro-to-testing",
+        },
+      },
+      { idempotencyKey: notificationId }
+    );
+
+    const arrived = await waitFor(async () =>
+      (await inboxItems(knock.secretKey, knock.inAppChannelId)).find(
+        (i) => i.data?.notificationId === notificationId
+      )
+    );
+    expect(arrived?.read_at).toBeNull();
+
+    await transport.bulkMarkRead({
+      recipientId: testUser.id,
+      key: "notificationId",
+      value: notificationId,
+    });
+
+    const read = await waitFor(async () =>
+      (await inboxItems(knock.secretKey, knock.inAppChannelId)).find(
+        (i) => i.data?.notificationId === notificationId && i.read_at !== null
+      )
+    );
+    expect(read?.read_at).not.toBeNull();
   });
 
   it("saves a notification preference and reads it back, leaving the others alone", async () => {

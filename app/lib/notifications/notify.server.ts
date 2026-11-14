@@ -6,6 +6,7 @@ import {
   enqueueNotificationJob,
   sendNotificationJobsSoon,
 } from "./outbox.server";
+import { pushClickPath } from "./push-click";
 import type { NotificationRecipient } from "./transport";
 
 // The typed layer every notification goes through. Each event is keyed by
@@ -13,7 +14,10 @@ import type { NotificationRecipient } from "./transport";
 // wrong payload. To add an event, add its workflow key and data here, then
 // call `notify` from the one shared function where the event happens.
 
-/** The data each workflow's templates get, beyond `notificationId` and `path`. */
+/**
+ * The data each workflow's templates get, beyond `notificationId`, `path`
+ * and `pushPath`.
+ */
 export type WorkflowData = {
   "refund-request-decided": {
     outcome: "approved" | "declined";
@@ -94,6 +98,12 @@ export type TriggerData<K extends WorkflowKey> = WorkflowData[K] & {
   /** Unique per notification. Also the idempotency key and the push tag. */
   notificationId: string;
   path: string;
+  /**
+   * The page a push click opens: `path` with `?notification=<id>`, so the
+   * app marks the inbox copy read (app/lib/notifications/push-click.ts).
+   * The FCM channel's link is built from it (knock/README.md).
+   */
+  pushPath: string;
 };
 
 /**
@@ -109,6 +119,7 @@ export const TRIGGER_DATA_FIELDS = {
     decisionNote: true,
     notificationId: true,
     path: true,
+    pushPath: true,
   },
   "new-open-refund-request": {
     refundRequestId: true,
@@ -117,6 +128,7 @@ export const TRIGGER_DATA_FIELDS = {
     reason: true,
     notificationId: true,
     path: true,
+    pushPath: true,
   },
   "new-enrollment": {
     courseId: true,
@@ -124,6 +136,7 @@ export const TRIGGER_DATA_FIELDS = {
     studentName: true,
     notificationId: true,
     path: true,
+    pushPath: true,
   },
   "new-or-changed-rating": {
     courseId: true,
@@ -132,6 +145,7 @@ export const TRIGGER_DATA_FIELDS = {
     rating: true,
     notificationId: true,
     path: true,
+    pushPath: true,
   },
   "enrollment-ended": {
     courseId: true,
@@ -139,18 +153,21 @@ export const TRIGGER_DATA_FIELDS = {
     studentName: true,
     notificationId: true,
     path: true,
+    pushPath: true,
   },
   "seat-claimed": {
     courseTitle: true,
     seatHolderName: true,
     notificationId: true,
     path: true,
+    pushPath: true,
   },
   "all-seats-claimed": {
     courseTitle: true,
     seatHolderName: true,
     notificationId: true,
     path: true,
+    pushPath: true,
   },
   "student-top-level-comment": {
     lessonTitle: true,
@@ -159,6 +176,7 @@ export const TRIGGER_DATA_FIELDS = {
     commentText: true,
     notificationId: true,
     path: true,
+    pushPath: true,
   },
   "instructor-or-platform-admin-reply": {
     lessonTitle: true,
@@ -167,6 +185,7 @@ export const TRIGGER_DATA_FIELDS = {
     commentText: true,
     notificationId: true,
     path: true,
+    pushPath: true,
   },
   "student-reply": {
     lessonTitle: true,
@@ -175,6 +194,7 @@ export const TRIGGER_DATA_FIELDS = {
     commentText: true,
     notificationId: true,
     path: true,
+    pushPath: true,
   },
 } as const satisfies {
   [K in WorkflowKey]: Record<keyof TriggerData<K>, true>;
@@ -229,6 +249,7 @@ export function notify(tx: DbExecutor, event: NotificationEvent) {
     ...event.data,
     notificationId,
     path: event.path,
+    pushPath: pushClickPath(event.path, notificationId),
   };
 
   enqueueNotificationJob(

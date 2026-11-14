@@ -4,7 +4,14 @@ import { Sidebar } from "~/components/sidebar";
 import { DevUI } from "~/components/dev-ui";
 import { Inbox } from "~/components/inbox/inbox";
 import { Toaster } from "sonner";
-import { getCurrentUserId, getDevCountry } from "~/lib/session";
+import {
+  getCurrentUserId,
+  getDevCountry,
+  getPushRegistrationId,
+} from "~/lib/session";
+import { pushClickRedirect } from "~/lib/notifications/push-click.server";
+import { useKeepBrowserPushCurrent } from "~/lib/notifications/use-push-upkeep";
+import { pushRegistrationHere } from "~/lib/push-registrations.server";
 import { getCountryTierInfo, COUNTRIES } from "~/lib/ppp";
 import { eq, and, or, sql, desc } from "drizzle-orm";
 import { db } from "~/db";
@@ -173,8 +180,14 @@ function getRecentlyProgressedCourses(userId: number, limit: number = 3) {
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const users = getAllUsers();
   const currentUserId = await getCurrentUserId(request);
+
+  // A push click opens its page with `?notification=<id>`: mark the inbox
+  // copy read, then show the page at its clean URL.
+  const pushClick = pushClickRedirect({ request, userId: currentUserId });
+  if (pushClick) throw pushClick;
+
+  const users = getAllUsers();
   const currentUser = currentUserId ? getUserById(currentUserId) : null;
   const devCountry = await getDevCountry(request);
   const countryTierInfo = getCountryTierInfo(devCountry);
@@ -214,6 +227,13 @@ export async function loader({ request }: Route.LoaderArgs) {
     countryTierInfo,
     countries: COUNTRIES,
     isTeamAdmin: currentUserId ? isTeamAdmin(currentUserId) : false,
+    // This browser's push registration for them, refreshed on app load.
+    pushRegistration: currentUserId
+      ? pushRegistrationHere({
+          userId: currentUserId,
+          registrationId: await getPushRegistrationId(request),
+        })
+      : null,
   };
 }
 
@@ -226,7 +246,13 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     countryTierInfo,
     countries,
     isTeamAdmin: userIsTeamAdmin,
+    pushRegistration,
   } = loaderData;
+
+  useKeepBrowserPushCurrent({
+    userId: currentUser?.id ?? null,
+    registration: pushRegistration,
+  });
 
   return (
     <div className="flex h-screen overflow-hidden">
