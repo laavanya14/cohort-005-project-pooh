@@ -19,8 +19,8 @@
       "channel_key": "fcm",
       "template": {
         "settings": { "delivery_type": "content" },
-        "title": "{% render 'instructor-or-platform-admin-reply-copy', part: 'headline', name: data.commenterName, reply: data.commentText, lesson: data.lessonTitle %}",
-        "text_body": "{% render 'instructor-or-platform-admin-reply-copy', part: 'detail', name: data.commenterName, reply: data.commentText, lesson: data.lessonTitle %}"
+        "title": "{% render 'comment-reply-copy', part: 'headline', name: data.commenterName, reply: data.commentText, lesson: data.lessonTitle %}",
+        "text_body": "{% render 'comment-reply-copy', part: 'detail', name: data.commenterName, reply: data.commentText, lesson: data.lessonTitle %}"
       }
     },
     {
@@ -29,7 +29,7 @@
       "channel_key": "postmark",
       "template": {
         "settings": { "layout_key": "default" },
-        "subject": "{% render 'instructor-or-platform-admin-reply-copy', part: 'headline', name: data.commenterName, reply: data.commentText, lesson: data.lessonTitle %}",
+        "subject": "{% render 'comment-reply-copy', part: 'headline', name: data.commenterName, reply: data.commentText, lesson: data.lessonTitle %}",
         "html_body@": "email_1/html_body.html"
       }
     }

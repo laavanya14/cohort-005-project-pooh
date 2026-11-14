@@ -132,49 +132,6 @@ describe("claimSeat", () => {
     expect(isEnrolled(student.id, course.id)).toBe(true);
   });
 
-  it("names the team licence's buyer as the team admin", () => {
-    const { student, teamAdmin, seats } = seedTeamLicence();
-
-    const result = claimSeat(seats[0].code, student.id, "GB");
-
-    expect(result).toMatchObject({ ok: true, teamAdminId: teamAdmin.id });
-  });
-
-  it("says when the claimed seat was the last available one on the team licence", () => {
-    const { student, seats } = seedTeamLicence({ seatCount: 2 });
-    const secondStudent = addStudent("second@example.com");
-
-    const first = claimSeat(seats[0].code, student.id, "GB");
-    const last = claimSeat(seats[1].code, secondStudent.id, "GB");
-
-    expect(first).toMatchObject({ ok: true, wasLastAvailableSeat: false });
-    expect(last).toMatchObject({ ok: true, wasLastAvailableSeat: true });
-  });
-
-  it("counts only the seats on the same team licence", () => {
-    const { student, teamAdmin, course, seats } = seedTeamLicence({
-      seatCount: 1,
-    });
-    const otherLicence = testDb()
-      .insert(purchases)
-      .values({ userId: teamAdmin.id, courseId: course.id, amountPaid: 3000 })
-      .returning()
-      .get();
-    testDb()
-      .insert(coupons)
-      .values({
-        teamId: seats[0].teamId,
-        courseId: course.id,
-        purchaseId: otherLicence.id,
-        code: "other-licence-seat",
-      })
-      .run();
-
-    const result = claimSeat(seats[0].code, student.id, "GB");
-
-    expect(result).toMatchObject({ ok: true, wasLastAvailableSeat: true });
-  });
-
   it("joins the caller's transaction, so the seat stays available when the caller rolls back", () => {
     const { student, course, seats } = seedTeamLicence();
 
@@ -193,7 +150,7 @@ describe("claimSeat", () => {
 
     expect(claimSeat("no-such-link", student.id, "GB")).toEqual({
       ok: false,
-      error: "Coupon not found",
+      error: "Seat link not found",
     });
   });
 
@@ -204,7 +161,7 @@ describe("claimSeat", () => {
 
     expect(claimSeat(seats[0].code, latecomer.id, "GB")).toEqual({
       ok: false,
-      error: "Coupon has already been redeemed",
+      error: "This seat has already been claimed",
     });
     expect(isEnrolled(latecomer.id, course.id)).toBe(false);
     expect(claimedBy(seats[0].id)).toBe(student.id);
@@ -229,8 +186,7 @@ describe("claimSeat", () => {
 
     expect(claimSeat(seats[0].code, student.id, "IN")).toEqual({
       ok: false,
-      error:
-        "This coupon can only be redeemed from the same country as the purchaser",
+      error: "This seat can only be claimed from the buyer's country",
     });
     expect(isEnrolled(student.id, course.id)).toBe(false);
     expect(claimedBy(seats[0].id)).toBeNull();
@@ -296,6 +252,32 @@ describe("claimSeat notifications", () => {
           seatHolderName: "last@example.com",
         },
       }),
+    ]);
+  });
+
+  it("counts only the seats on the same team licence when deciding all seats are claimed", async () => {
+    const { student, teamAdmin, course, seats } = seedTeamLicence({
+      seatCount: 1,
+    });
+    const otherLicence = testDb()
+      .insert(purchases)
+      .values({ userId: teamAdmin.id, courseId: course.id, amountPaid: 3000 })
+      .returning()
+      .get();
+    testDb()
+      .insert(coupons)
+      .values({
+        teamId: seats[0].teamId,
+        courseId: course.id,
+        purchaseId: otherLicence.id,
+        code: "other-licence-seat",
+      })
+      .run();
+
+    claimSeat(seats[0].code, student.id, "GB");
+
+    expect(await seatNotificationsSent()).toEqual([
+      expect.objectContaining({ workflowKey: "all-seats-claimed" }),
     ]);
   });
 

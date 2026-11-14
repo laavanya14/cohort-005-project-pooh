@@ -2,7 +2,6 @@ import { data } from "react-router";
 import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { db } from "~/db";
 import {
-  coupons,
   courses,
   enrollments,
   lessonProgress,
@@ -25,6 +24,7 @@ import {
   archiveNotifications,
   notify,
 } from "~/lib/notifications/notify.server";
+import { claimedSeatFor, hasClaimedSeat, hasSeats } from "~/lib/seats.server";
 import type { DbExecutor } from "~/db/executor";
 
 // The database side of refund requests. The rules themselves live in
@@ -98,16 +98,6 @@ function hasRefundRequestWithStatus(
         eq(refundRequests.purchaseId, purchaseId),
         eq(refundRequests.status, status)
       )
-    )
-    .get();
-}
-
-function hasClaimedSeat(purchaseId: number) {
-  return !!db
-    .select({ id: coupons.id })
-    .from(coupons)
-    .where(
-      and(eq(coupons.purchaseId, purchaseId), isNotNull(coupons.redeemedAt))
     )
     .get();
 }
@@ -401,22 +391,12 @@ function endRefundedEnrollment(
   reviewerId: number,
   purchase: typeof purchases.$inferSelect
 ) {
-  const isTeamLicence = !!tx
-    .select({ id: coupons.id })
-    .from(coupons)
-    .where(eq(coupons.purchaseId, purchase.id))
-    .get();
-
-  const buyerClaimedSeat = !!tx
-    .select({ id: coupons.id })
-    .from(coupons)
-    .where(
-      and(
-        eq(coupons.redeemedByUserId, purchase.userId),
-        eq(coupons.courseId, purchase.courseId)
-      )
-    )
-    .get();
+  const isTeamLicence = hasSeats(purchase.id, tx);
+  const buyerClaimedSeat = !!claimedSeatFor(
+    purchase.userId,
+    purchase.courseId,
+    tx
+  );
 
   if (isTeamLicence || buyerClaimedSeat) return;
 

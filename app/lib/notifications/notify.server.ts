@@ -200,6 +200,11 @@ export const TRIGGER_DATA_FIELDS = {
   [K in WorkflowKey]: Record<keyof TriggerData<K>, true>;
 };
 
+/** Whether `value`, say from a form, is one of our workflow keys. */
+export function isWorkflowKey(value: string): value is WorkflowKey {
+  return Object.keys(TRIGGER_DATA_FIELDS).includes(value);
+}
+
 const personColumns = { id: users.id, name: users.name, email: users.email };
 
 function lookUpPeople(tx: DbExecutor, userIds: number[]) {
@@ -273,6 +278,16 @@ type ArchiveKey<K extends WorkflowKey> = {
   string;
 
 /**
+ * The value an archive key's copies are matched on. `ArchiveKey` only lets
+ * through string and number fields; the intersection says so to the
+ * compiler, which can't see it through the generic.
+ */
+type ArchiveValue<
+  K extends WorkflowKey,
+  F extends ArchiveKey<K>,
+> = WorkflowData[K][F] & (string | number);
+
+/**
  * Archives every inbox copy of a workflow's notifications whose trigger data
  * has `key` equal to `value`, for everyone who got one. Call it inside the
  * action's transaction, so it happens only if the action commits.
@@ -282,11 +297,15 @@ export function archiveNotifications<
   F extends ArchiveKey<K>,
 >(
   tx: DbExecutor,
-  { workflowKey, key, value }: { workflowKey: K; key: F; value: WorkflowData[K][F] }
+  {
+    workflowKey,
+    key,
+    value,
+  }: { workflowKey: K; key: F; value: ArchiveValue<K, F> }
 ) {
   enqueueNotificationJob(tx, {
     type: "bulkArchive",
-    selector: { workflowKey, key, value: value as string | number },
+    selector: { workflowKey, key, value },
   });
   sendNotificationJobsSoon();
 }

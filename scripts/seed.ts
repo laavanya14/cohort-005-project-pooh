@@ -14,6 +14,8 @@ import {
   RefundRequestStatus,
   TeamMemberRole,
 } from "../app/db/schema";
+import { pushClickPath } from "../app/lib/notifications/push-click";
+import type { TriggerData } from "../app/lib/notifications/notify.server";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -2340,9 +2342,19 @@ This course is still in draft while the cluster examples are rewritten against t
   // retry timer leaves failed jobs alone, so nothing is sent on startup.
 
   const declinedBuyer = students[0];
+  const failedNotificationId = "00000000-0000-4000-8000-000000000001";
+  const failedNotificationData: TriggerData<"refund-request-decided"> = {
+    notificationId: failedNotificationId,
+    path: `/courses/${course2.slug}`,
+    pushPath: pushClickPath(`/courses/${course2.slug}`, failedNotificationId),
+    outcome: "declined",
+    courseTitle: course2.title,
+    decisionNote:
+      "This request came in after the 14-day refund window had closed.",
+  };
   db.insert(schema.notificationJobs)
     .values({
-      id: "00000000-0000-4000-8000-000000000001",
+      id: failedNotificationId,
       job: {
         type: "trigger",
         workflowKey: "refund-request-decided",
@@ -2355,14 +2367,7 @@ This course is still in draft while the cluster examples are rewritten against t
             },
           ],
           actor: { id: String(admin.id), name: admin.name, email: admin.email },
-          data: {
-            notificationId: "00000000-0000-4000-8000-000000000001",
-            path: `/courses/${course2.slug}`,
-            outcome: "declined",
-            courseTitle: course2.title,
-            decisionNote:
-              "This request came in after the 14-day refund window had closed.",
-          },
+          data: failedNotificationData,
         },
       },
       attempts: 1440,

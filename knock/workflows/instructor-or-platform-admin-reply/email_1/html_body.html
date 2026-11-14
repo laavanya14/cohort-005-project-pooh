@@ -1,5 +1,5 @@
-{% capture headline %}{% render 'instructor-or-platform-admin-reply-copy', part: 'headline', name: data.commenterName, reply: data.commentText, lesson: data.lessonTitle %}{% endcapture %}
-{% capture detail %}{% render 'instructor-or-platform-admin-reply-copy', part: 'detail', name: data.commenterName, reply: data.commentText, lesson: data.lessonTitle %}{% endcapture %}
+{% capture headline %}{% render 'comment-reply-copy', part: 'headline', name: data.commenterName, reply: data.commentText, lesson: data.lessonTitle %}{% endcapture %}
+{% capture detail %}{% render 'comment-reply-copy', part: 'detail', name: data.commenterName, reply: data.commentText, lesson: data.lessonTitle %}{% endcapture %}
 <p><strong>{{ headline | escape }}</strong></p>
 <p>{{ detail | escape }}</p>
 <p>{{ data.courseTitle | escape }}</p>

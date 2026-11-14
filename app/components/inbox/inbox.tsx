@@ -33,12 +33,12 @@ import {
 
 // The thin wrapper that connects the display-only Inbox drawer to Knock's
 // headless React hooks. It's the only place the browser talks to Knock's
-// feed. Without Knock configured, it shows the drawer's notice instead.
+// feed API. Without Knock configured, it shows the drawer's notice instead.
 
 const PAGE_SIZE = 20;
 
-/** One feed client per tab, so each has its own counts and pages. */
-const FEED_OPTIONS: Record<InboxTabKey, FeedClientOptions> = {
+/** One Knock feed client per Inbox tab, so each has its own counts and pages. */
+const TAB_CLIENT_OPTIONS: Record<InboxTabKey, FeedClientOptions> = {
   "waiting-on-you": {
     workflow_categories: ["waiting-on-you"],
     archived: "exclude",
@@ -136,16 +136,16 @@ function InboxWithoutKnock() {
   );
 }
 
-function useTabFeed(channelId: string, key: InboxTabKey) {
+function useInboxTab(channelId: string, key: InboxTabKey) {
   const knock = useKnockClient();
-  const feed = useNotifications(knock, channelId, FEED_OPTIONS[key]);
-  const state = useNotificationStore(feed);
+  const tabClient = useNotifications(knock, channelId, TAB_CLIENT_OPTIONS[key]);
+  const state = useNotificationStore(tabClient);
 
   useEffect(() => {
-    void feed.fetch();
-  }, [feed]);
+    void tabClient.fetch();
+  }, [tabClient]);
 
-  return { feed, tab: toTab(state) };
+  return { tabClient, tab: toTab(state) };
 }
 
 function toTab(state: FeedStoreState): InboxTab {
@@ -161,9 +161,12 @@ function toTab(state: FeedStoreState): InboxTab {
 }
 
 /** Every unread notification of one kind, including pages not loaded. */
-async function allUnread(feed: Feed, kind: InboxKind): Promise<FeedItem[]> {
-  const unread = feed.knock.feeds.initialize(feed.feedId, {
-    ...FEED_OPTIONS[kind],
+async function allUnread(
+  tabClient: Feed,
+  kind: InboxKind
+): Promise<FeedItem[]> {
+  const unread = tabClient.knock.feeds.initialize(tabClient.feedId, {
+    ...TAB_CLIENT_OPTIONS[kind],
     status: "unread",
     page_size: 50,
   });
@@ -193,61 +196,61 @@ function KnockInbox({ channelId }: { channelId: string }) {
     setOpen(false)
   );
 
-  const waitingOnYou = useTabFeed(channelId, "waiting-on-you");
-  const aboutYou = useTabFeed(channelId, "about-you");
-  const activity = useTabFeed(channelId, "activity");
-  const archived = useTabFeed(channelId, "archived");
+  const waitingOnYou = useInboxTab(channelId, "waiting-on-you");
+  const aboutYou = useInboxTab(channelId, "about-you");
+  const activity = useInboxTab(channelId, "activity");
+  const archived = useInboxTab(channelId, "archived");
 
-  const feeds: Record<InboxTabKey, Feed> = {
-    "waiting-on-you": waitingOnYou.feed,
-    "about-you": aboutYou.feed,
-    activity: activity.feed,
-    archived: archived.feed,
+  const tabClients: Record<InboxTabKey, Feed> = {
+    "waiting-on-you": waitingOnYou.tabClient,
+    "about-you": aboutYou.tabClient,
+    activity: activity.tabClient,
+    archived: archived.tabClient,
   };
 
-  /** Runs a change against the feed item behind a notification. */
+  /** Runs a change against the Knock item behind a notification. */
   function change(
     notification: InboxNotification,
-    act: (feed: Feed, item: FeedItem) => Promise<unknown>
+    act: (tabClient: Feed, item: FeedItem) => Promise<unknown>
   ) {
-    const feed = notification.archived
-      ? feeds.archived
-      : feeds[notification.kind];
-    const item = feed
+    const tabClient = notification.archived
+      ? tabClients.archived
+      : tabClients[notification.kind];
+    const item = tabClient
       .getState()
       .items.find((candidate) => candidate.id === notification.id);
-    if (item) act(feed, item).catch(showError);
+    if (item) act(tabClient, item).catch(showError);
   }
 
   function openNotification(notification: InboxNotification) {
     setOpen(false);
     if (!notification.read) {
-      change(notification, (feed, item) => feed.markAsRead(item));
+      change(notification, (tabClient, item) => tabClient.markAsRead(item));
     }
     void navigate(notification.path);
   }
 
   async function markAllRead(kind: InboxKind) {
-    const feed = feeds[kind];
-    const loadedUnread = feed.getState().items.filter((i) => !i.read_at);
-    if (loadedUnread.length > 0) await feed.markAsRead(loadedUnread);
+    const tabClient = tabClients[kind];
+    const loadedUnread = tabClient.getState().items.filter((i) => !i.read_at);
+    if (loadedUnread.length > 0) await tabClient.markAsRead(loadedUnread);
 
     // Knock's markAllAsRead() would mark every kind read, so mark this kind's
     // unread notifications one page at a time instead.
     const loadedIds = new Set(loadedUnread.map((item) => item.id));
-    const rest = (await allUnread(feed, kind)).filter(
+    const rest = (await allUnread(tabClient, kind)).filter(
       (item) => !loadedIds.has(item.id)
     );
     for (let i = 0; i < rest.length; i += 50) {
       const ids = rest.slice(i, i + 50).map((item) => item.id);
-      await feed.knock.messages.batchUpdateStatuses(ids, "read");
+      await tabClient.knock.messages.batchUpdateStatuses(ids, "read");
     }
-    if (rest.length > 0) await feed.fetch();
+    if (rest.length > 0) await tabClient.fetch();
   }
 
   // The pop-up for new notifications that arrive while the page is open.
   useEffect(() => {
-    const popUpFeeds = POP_UP_KINDS.map((kind) => feeds[kind]);
+    const popUpTabClients = POP_UP_KINDS.map((kind) => tabClients[kind]);
 
     function popUp({ items }: FeedEventPayload) {
       for (const item of items) {
@@ -265,12 +268,14 @@ function KnockInbox({ channelId }: { channelId: string }) {
       }
     }
 
-    for (const feed of popUpFeeds) feed.on("items.received.realtime", popUp);
+    for (const tabClient of popUpTabClients)
+      tabClient.on("items.received.realtime", popUp);
     return () => {
-      for (const feed of popUpFeeds) feed.off("items.received.realtime", popUp);
+      for (const tabClient of popUpTabClients)
+        tabClient.off("items.received.realtime", popUp);
     };
-    // The feeds are stable, and openNotification only uses them and setters.
-  }, [waitingOnYou.feed, aboutYou.feed]);
+    // The tab clients are stable, and openNotification only uses them and setters.
+  }, [waitingOnYou.tabClient, aboutYou.tabClient]);
 
   const tabs: Record<InboxTabKey, InboxTab> = {
     "waiting-on-you": waitingOnYou.tab,
@@ -296,25 +301,32 @@ function KnockInbox({ channelId }: { channelId: string }) {
         tabs={tabs}
         onClose={() => setOpen(false)}
         onOpen={openNotification}
-        onMarkRead={(n) => change(n, (feed, item) => feed.markAsRead(item))}
-        onMarkUnread={(n) => change(n, (feed, item) => feed.markAsUnread(item))}
+        onMarkRead={(n) =>
+          change(n, (tabClient, item) => tabClient.markAsRead(item))
+        }
+        onMarkUnread={(n) =>
+          change(n, (tabClient, item) => tabClient.markAsUnread(item))
+        }
         onMarkAllRead={(kind) => {
           markAllRead(kind).catch(showError);
         }}
         onArchive={(n) =>
-          change(n, async (feed, item) => {
-            await feed.markAsArchived(item);
-            await feeds.archived.fetch();
+          change(n, async (tabClient, item) => {
+            await tabClient.markAsArchived(item);
+            await tabClients.archived.fetch();
           })
         }
         onUnarchive={(n) =>
-          change(n, async (feed, item) => {
-            await feed.markAsUnarchived(item);
-            await Promise.all([feeds.archived.fetch(), feeds[n.kind].fetch()]);
+          change(n, async (tabClient, item) => {
+            await tabClient.markAsUnarchived(item);
+            await Promise.all([
+              tabClients.archived.fetch(),
+              tabClients[n.kind].fetch(),
+            ]);
           })
         }
         onLoadMore={(key) => {
-          feeds[key].fetchNextPage().catch(showError);
+          tabClients[key].fetchNextPage().catch(showError);
         }}
         onOpenNotificationPreferences={openNotificationPreferences}
         pushAsk={pushAsks?.inboxCard}

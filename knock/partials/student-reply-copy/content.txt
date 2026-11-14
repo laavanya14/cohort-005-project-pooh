@@ -1,5 +1,0 @@
-{%- if part == 'headline' -%}
-  {{ name | strip_newlines }} replied to your comment
-{%- else -%}
-  "{{ reply | strip_newlines | truncate: 100 }}" · {{ lesson | strip_newlines }}
-{%- endif -%}
