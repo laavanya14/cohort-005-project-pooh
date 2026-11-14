@@ -6,8 +6,14 @@ import { resolveCountry } from "~/lib/country.server";
 import { parseParams, parseFormData } from "~/lib/validation";
 import { Card, CardContent } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
-import { Ticket, AlertCircle, CheckCircle2, Globe } from "lucide-react";
-import { data } from "react-router";
+import {
+  Ticket,
+  AlertCircle,
+  AlertTriangle,
+  CheckCircle2,
+  Globe,
+} from "lucide-react";
+import { data, isRouteErrorResponse } from "react-router";
 import { db } from "~/db";
 import { purchases, coupons, courses } from "~/db/schema";
 import { eq } from "drizzle-orm";
@@ -43,7 +49,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 
   const coupon = getCouponByCode(code);
   if (!coupon) {
-    throw data("Coupon not found.", { status: 404 });
+    throw data("Seat link not found.", { status: 404 });
   }
 
   const currentUserId = await getCurrentUserId(request);
@@ -208,6 +214,51 @@ export default function Redeem({ loaderData }: Route.ComponentProps) {
           </div>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+export function ErrorBoundary({ error, params }: Route.ErrorBoundaryProps) {
+  let title = "Something went wrong";
+  let message = "An unexpected error occurred.";
+  let refusedClaim = false;
+
+  if (isRouteErrorResponse(error)) {
+    const said = typeof error.data === "string" ? error.data : undefined;
+    if (error.status === 400) {
+      // The claim was refused, e.g. someone claimed the seat meanwhile.
+      refusedClaim = true;
+      title = "Couldn't claim this seat";
+      message = said ?? "This seat can't be claimed.";
+    } else if (error.status === 401) {
+      title = "Sign in required";
+      message = said ?? "Please select a user from the DevUI panel.";
+    } else if (error.status === 404) {
+      title = "Seat link not found";
+      message = said ?? "This seat link doesn't exist.";
+    } else {
+      title = `Error ${error.status}`;
+      message = said ?? error.statusText;
+    }
+  }
+
+  return (
+    <div className="flex min-h-[50vh] items-center justify-center p-6">
+      <div className="text-center">
+        <AlertTriangle className="mx-auto mb-4 size-12 text-muted-foreground" />
+        <h1 className="mb-2 text-2xl font-bold">{title}</h1>
+        <p className="mb-6 text-muted-foreground">{message}</p>
+        <div className="flex items-center justify-center gap-3">
+          {refusedClaim && params.code && (
+            <Link to={`/redeem/${params.code}`}>
+              <Button>Back to the seat link</Button>
+            </Link>
+          )}
+          <Link to="/courses">
+            <Button variant="outline">Browse Courses</Button>
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }
