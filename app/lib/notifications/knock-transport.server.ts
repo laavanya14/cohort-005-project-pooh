@@ -10,8 +10,8 @@ import type {
 // environment (the Knock Node SDK would read KNOCK_API_KEY by itself).
 //
 // Each method is one Knock call made through `callKnock`. To add one (bulk
-// mark read, setPushTokens), add it to `NotificationTransport`,
-// then here, the file fake and the recording fake.
+// mark read), add it to `NotificationTransport`, then here, the file fake
+// and the recording fake.
 
 const KNOCK_API = "https://api.knock.app";
 
@@ -19,6 +19,8 @@ export type KnockTransportOptions = {
   secretKey: string;
   /** The in-app channel's id (a UUID) in this Knock environment. */
   inAppChannelId: string;
+  /** The FCM (browser push) channel's id (a UUID) in this Knock environment. */
+  fcmChannelId: string;
   /** Replaced in tests. */
   fetch?: typeof fetch;
   baseUrl?: string;
@@ -98,6 +100,7 @@ function toKnockWorkflows(changes: NotificationPreferences) {
 export function createKnockTransport({
   secretKey,
   inAppChannelId,
+  fcmChannelId,
   fetch: fetchKnock = globalThis.fetch,
   baseUrl = KNOCK_API,
 }: KnockTransportOptions): NotificationTransport {
@@ -153,6 +156,18 @@ export function createKnockTransport({
           workflows: [workflowKey],
         },
       });
+    },
+
+    async setPushTokens(userId, tokens) {
+      const path = `/v1/users/${encodeURIComponent(userId)}/channel_data/${encodeURIComponent(fcmChannelId)}`;
+      if (tokens.length === 0) {
+        // Already unset is as good as unset.
+        await callKnock({ method: "DELETE", path, missingIsEmpty: true });
+        return;
+      }
+      // Replaces the list Knock holds, and creates the person if Knock
+      // doesn't know them yet.
+      await callKnock({ method: "PUT", path, body: { data: { tokens } } });
     },
 
     preferences: {

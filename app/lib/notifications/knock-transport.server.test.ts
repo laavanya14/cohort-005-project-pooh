@@ -32,6 +32,7 @@ describe("the real Knock adapter", () => {
     const transport = createKnockTransport({
       secretKey: "sk_test_secret",
       inAppChannelId: "in-app-channel-uuid",
+      fcmChannelId: "fcm-channel-uuid",
       fetch: fetchMock,
     });
 
@@ -76,6 +77,7 @@ describe("the real Knock adapter", () => {
     const transport = createKnockTransport({
       secretKey: "sk_test_secret",
       inAppChannelId: "in-app-channel-uuid",
+      fcmChannelId: "fcm-channel-uuid",
       fetch: knockAnswering(422, { message: "Invalid recipients" }),
     });
 
@@ -93,6 +95,7 @@ describe("the real Knock adapter", () => {
     const transport = createKnockTransport({
       secretKey: "sk_test_secret",
       inAppChannelId: "in-app-channel-uuid",
+      fcmChannelId: "fcm-channel-uuid",
       fetch: fetchMock,
     });
 
@@ -120,6 +123,7 @@ describe("the real Knock adapter", () => {
     const transport = createKnockTransport({
       secretKey: "sk_test_secret",
       inAppChannelId: "in-app-channel-uuid",
+      fcmChannelId: "fcm-channel-uuid",
       fetch: knockAnswering(500, { message: "Internal error" }),
     });
 
@@ -136,6 +140,7 @@ describe("the real Knock adapter", () => {
     const transport = createKnockTransport({
       secretKey: "sk_test_secret",
       inAppChannelId: "in-app-channel-uuid",
+      fcmChannelId: "fcm-channel-uuid",
       fetch: vi.fn<typeof fetch>(async () => {
         throw new TypeError("fetch failed");
       }),
@@ -156,6 +161,7 @@ describe("the real Knock adapter's notification preferences", () => {
     return createKnockTransport({
       secretKey: "sk_test_secret",
       inAppChannelId: "in-app-channel-uuid",
+      fcmChannelId: "fcm-channel-uuid",
       fetch: fetchMock,
     });
   }
@@ -245,6 +251,65 @@ describe("the real Knock adapter's notification preferences", () => {
       transportAnswering(
         knockAnswering(500, { message: "Internal error" })
       ).preferences.set("12", { "refund-request-decided": { push: false } })
+    ).rejects.toThrow(/500.*Internal error/);
+  });
+});
+
+describe("the real Knock adapter's push tokens", () => {
+  function transportAnswering(fetchMock: ReturnType<typeof knockAnswering>) {
+    return createKnockTransport({
+      secretKey: "sk_test_secret",
+      inAppChannelId: "in-app-channel-uuid",
+      fcmChannelId: "fcm-channel-uuid",
+      fetch: fetchMock,
+    });
+  }
+
+  it("replaces the person's whole token list on the FCM channel", async () => {
+    const fetchMock = knockAnswering(200, { data: { tokens: [] } });
+
+    await transportAnswering(fetchMock).setPushTokens("12", [
+      "laptop-token",
+      "phone-token",
+    ]);
+
+    const call = onlyCall(fetchMock);
+    expect(call.method).toBe("PUT");
+    expect(call.url).toBe(
+      "https://api.knock.app/v1/users/12/channel_data/fcm-channel-uuid"
+    );
+    expect(call.headers.get("authorization")).toBe("Bearer sk_test_secret");
+    expect(call.body).toEqual({
+      data: { tokens: ["laptop-token", "phone-token"] },
+    });
+  });
+
+  it("unsets the person's list when it's empty", async () => {
+    const fetchMock = knockAnswering(200);
+
+    await transportAnswering(fetchMock).setPushTokens("12", []);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    expect(init?.method).toBe("DELETE");
+    expect(String(url)).toBe(
+      "https://api.knock.app/v1/users/12/channel_data/fcm-channel-uuid"
+    );
+  });
+
+  it("treats unsetting a list Knock doesn't have as done", async () => {
+    await expect(
+      transportAnswering(
+        knockAnswering(404, { code: "resource_missing" })
+      ).setPushTokens("12", [])
+    ).resolves.toBeUndefined();
+  });
+
+  it("rejects when Knock doesn't accept the list, so the outbox tries again", async () => {
+    await expect(
+      transportAnswering(
+        knockAnswering(500, { message: "Internal error" })
+      ).setPushTokens("12", ["laptop-token"])
     ).rejects.toThrow(/500.*Internal error/);
   });
 });

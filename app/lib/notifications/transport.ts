@@ -3,8 +3,8 @@
 // files under .outbox/, and tests record calls in memory. Whichever is used
 // is always passed in explicitly, never picked up by default.
 //
-// Bulk mark read by a trigger-data key and setPushTokens join `trigger`,
-// `bulkArchive` and `preferences` here as the tickets that need them land.
+// Bulk mark read by a trigger-data key joins `trigger`, `bulkArchive`,
+// `setPushTokens` and `preferences` here when the ticket that needs it lands.
 
 /** A person as Knock sees them. `id` is Cadence's user id. */
 export type NotificationRecipient = {
@@ -59,6 +59,13 @@ export type NotificationTransport = {
    * to. Doing it twice is harmless. Rejects when Knock doesn't accept it.
    */
   bulkArchive(selector: InAppMessageSelector): Promise<void>;
+
+  /**
+   * Replaces the browser push tokens Knock holds for a person with `tokens`,
+   * their whole list, and unsets it when the list is empty. Cadence never
+   * reads Knock's list (docs/adr/0014). Rejects when Knock doesn't accept it.
+   */
+  setPushTokens(userId: string, tokens: string[]): Promise<void>;
 
   /**
    * A person's notification preferences, which apply on every device. They

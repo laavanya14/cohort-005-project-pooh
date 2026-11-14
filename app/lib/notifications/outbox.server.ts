@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, isNull, lte, sql } from "drizzle-orm";
 import { db } from "~/db";
 import type { DbExecutor } from "~/db/executor";
-import { notificationJobs } from "~/db/schema";
+import { notificationJobs, pushRegistrations } from "~/db/schema";
 import { describeJob, performJob, type NotificationJob } from "./jobs";
 import type {
   InAppMessageSelector,
@@ -20,6 +20,10 @@ import type {
 // Knock has accepted the trigger (or the trigger was marked failed, leaving
 // nothing to archive). So a refund request decided or withdrawn before its
 // notification reached Knock still ends up archived.
+//
+// Push tokens are combined per person: a person has at most one
+// setPushTokens job waiting, and it writes their whole list as the push
+// registrations table has it when the job is sent.
 
 /** How long a job Knock didn't accept waits before it is tried again. */
 const RETRY_DELAY_MS = 60 * 1000;
@@ -43,6 +47,11 @@ export function enqueueNotificationJob(
   const now = (
     outboxGlobal.__cadenceNotificationOutbox?.clock() ?? new Date()
   ).toISOString();
+  if (job.type === "setPushTokens") {
+    const waiting = waitingPushTokenSyncFor(tx, job.userId);
+    if (waiting) return waiting;
+  }
+
   const afterJobId =
     job.type === "bulkArchive"
       ? waitingTriggerFor(tx, job.selector)
@@ -75,6 +84,37 @@ function waitingTriggerFor(tx: DbExecutor, selector: InAppMessageSelector) {
     )
     .orderBy(desc(notificationJobs.createdAt), desc(sql`rowid`))
     .get()?.id;
+}
+
+/**
+ * The id of the person's setPushTokens job that is waiting and not being
+ * sent right now, if there is one. A job being sent has already read the
+ * token list, so a change after that needs a job of its own.
+ */
+function waitingPushTokenSyncFor(tx: DbExecutor, userId: number) {
+  return tx
+    .select({ id: notificationJobs.id })
+    .from(notificationJobs)
+    .where(
+      and(
+        isNull(notificationJobs.failedAt),
+        sql`json_extract(${notificationJobs.job}, '$.type') = 'setPushTokens'`,
+        sql`json_extract(${notificationJobs.job}, '$.userId') = ${userId}`
+      )
+    )
+    .all()
+    .find((row) => !inFlight.has(row.id))?.id;
+}
+
+/** The person's push tokens, oldest registration first. */
+function pushTokensOf(userId: number) {
+  return db
+    .select({ token: pushRegistrations.token })
+    .from(pushRegistrations)
+    .where(eq(pushRegistrations.userId, userId))
+    .orderBy(asc(pushRegistrations.id))
+    .all()
+    .map((row) => row.token);
 }
 
 /** Whether the job's `afterJobId` job is still waiting for Knock to accept it. */
@@ -124,7 +164,7 @@ export async function sendNotificationJobs({
     inFlight.add(row.id);
 
     try {
-      await performJob(transport, row.job, row.id);
+      await performJob(transport, row.job, row.id, { pushTokensOf });
     } catch (error) {
       const attempts = row.attempts + 1;
       const gaveUp =

@@ -98,6 +98,14 @@ const activityKeys = repoKeys.filter((key) =>
   readWorkflow(key).categories?.includes("activity")
 );
 
+/** The workflow's browser push steps (Knock's FCM channel, key `fcm`). */
+function pushSteps(key: string) {
+  return readWorkflow(key).steps.filter(
+    (step) => step.type === "channel" && step.channel_key === "fcm"
+  );
+}
+const pushKeys = repoKeys.filter((key) => pushSteps(key).length > 0);
+
 describe("the Knock templates kept in the repo", () => {
   it.each(triggeredKeys)(
     "has the %s workflow Cadence triggers",
@@ -118,12 +126,53 @@ describe("the Knock templates kept in the repo", () => {
     }
   );
 
-  it("puts a new open refund request in Waiting on you, inbox only until browser push", () => {
+  it("puts a new open refund request in Waiting on you, by inbox and push but never email", () => {
     const workflow = readWorkflow("new-open-refund-request");
 
     expect(workflow.categories).toContain("waiting-on-you");
-    expect(workflow.steps.map((step) => step.channel_key)).toEqual(["in-app"]);
+    expect(workflow.steps.map((step) => step.channel_key)).toEqual([
+      "in-app",
+      "fcm",
+    ]);
   });
+
+  it("sends browser push for exactly the four push events", () => {
+    expect(pushKeys.sort()).toEqual([
+      "instructor-or-platform-admin-reply",
+      "new-open-refund-request",
+      "refund-request-decided",
+      "student-top-level-comment",
+    ]);
+  });
+
+  it.each(pushKeys)(
+    "titles the %s push with the inbox headline and gives it the detail line as a plain-text body",
+    (key) => {
+      const [step, ...more] = pushSteps(key);
+      expect(more).toEqual([]);
+      if (!step) throw new Error(`${key} has no push step`);
+
+      expect(templateField(key, step, "title")?.trim()).toMatch(
+        /^\{% render '[^']+-copy'[^%]*part: 'headline'[^%]*%\}$/
+      );
+      expect(templateField(key, step, "text_body")?.trim()).toMatch(
+        /^\{% render '[^']+-copy'[^%]*part: 'detail'[^%]*%\}$/
+      );
+    }
+  );
+
+  it.each(pushKeys)(
+    "sends the %s push as content, never silent, with no buttons or sticky notification",
+    (key) => {
+      for (const step of pushSteps(key)) {
+        expect(step.template?.settings).toMatchObject({
+          delivery_type: "content",
+        });
+        const everything = JSON.stringify(step.template);
+        expect(everything).not.toMatch(/requireInteraction|actions/);
+      }
+    }
+  );
 
   it.each(repoKeys)("tags %s with exactly one kind", (key) => {
     const { categories = [] } = readWorkflow(key);

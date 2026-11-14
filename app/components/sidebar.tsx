@@ -4,6 +4,8 @@ import { cn } from "~/lib/utils";
 import { UserRole } from "~/db/schema";
 import { userRoleLabels } from "~/lib/user-roles";
 import { UserAvatar } from "~/components/user-avatar";
+import { forgetBrowserPushToken } from "~/lib/notifications/browser-push";
+import { useBrowserPushConfig } from "~/lib/notifications/use-browser-push";
 import {
   BookOpen,
   ChartColumn,
@@ -123,6 +125,7 @@ export function Sidebar({
   inbox,
 }: SidebarProps) {
   const currentUserRole = currentUser?.role ?? null;
+  const pushConfig = useBrowserPushConfig();
   const [isDark, setIsDark] = useState(false);
 
   useEffect(() => {
@@ -254,7 +257,15 @@ export function Sidebar({
             >
               <Settings className="size-4" />
             </NavLink>
-            <Form method="post" action="/api/logout">
+            <Form
+              method="post"
+              action="/api/logout"
+              onSubmit={() => {
+                // The server stops push to this browser either way; this
+                // also deletes Firebase's token when the browser can.
+                if (pushConfig) void forgetBrowserPushToken(pushConfig);
+              }}
+            >
               <button
                 type="submit"
                 title="Sign out"

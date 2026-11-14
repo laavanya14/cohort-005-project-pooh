@@ -14,6 +14,16 @@
       }
     },
     {
+      "ref": "push_1",
+      "type": "channel",
+      "channel_key": "fcm",
+      "template": {
+        "settings": { "delivery_type": "content" },
+        "title": "{% render 'refund-request-decided-copy', part: 'headline', outcome: data.outcome, course: data.courseTitle, note: data.decisionNote %}",
+        "text_body": "{% render 'refund-request-decided-copy', part: 'detail', outcome: data.outcome, course: data.courseTitle, note: data.decisionNote %}"
+      }
+    },
+    {
       "ref": "email_1",
       "type": "channel",
       "channel_key": "postmark",

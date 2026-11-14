@@ -28,6 +28,10 @@ import {
 } from "~/lib/notifications/preferences.server";
 import type { NotificationChannelType } from "~/lib/notifications/transport";
 import { Switch } from "~/components/ui/switch";
+import { BrowserPushRow } from "~/components/browser-push-row";
+import { useBrowserPush } from "~/lib/notifications/use-browser-push";
+import { isRegisteredForPush } from "~/lib/push-registrations.server";
+import { getPushRegistrationId } from "~/lib/session";
 
 const settingsSchema = z.discriminatedUnion("intent", [
   z.object({
@@ -101,6 +105,11 @@ export async function loader({ request }: Route.LoaderArgs) {
     },
     refundRequests,
     notificationPreferences,
+    // Whether this browser (the session's registration) gets push for them.
+    pushRegisteredHere: isRegisteredForPush({
+      userId: currentUserId,
+      registrationId: await getPushRegistrationId(request),
+    }),
   };
 }
 
@@ -169,7 +178,8 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function Settings({ loaderData }: Route.ComponentProps) {
-  const { user, refundRequests, notificationPreferences } = loaderData;
+  const { user, refundRequests, notificationPreferences, pushRegisteredHere } =
+    loaderData;
   const fetcher = useFetcher();
   const nameInputRef = useRef<HTMLInputElement>(null);
 
@@ -277,7 +287,10 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
         </Card>
       )}
 
-      <NotificationsSection rows={notificationPreferences} />
+      <NotificationsSection
+        rows={notificationPreferences}
+        pushRegisteredHere={pushRegisteredHere}
+      />
     </div>
   );
 }
@@ -292,12 +305,15 @@ const CHANNEL_LABELS: Record<NotificationChannelType, string> = {
 /**
  * Settings → Notifications, where the Inbox drawer's gear links: a Push and
  * an Email switch for each event the person can receive by push or email.
- * `rows` is null when Knock couldn't be reached.
+ * `rows` is null when Knock couldn't be reached. Browser push in this
+ * browser comes first; it's hidden when Knock isn't configured.
  */
 function NotificationsSection({
   rows,
+  pushRegisteredHere,
 }: {
   rows: NotificationPreferenceRow[] | null;
+  pushRegisteredHere: boolean;
 }) {
   return (
     <Card id="notifications" className="mt-8 max-w-md scroll-mt-6">
@@ -309,6 +325,7 @@ function NotificationsSection({
         </p>
       </CardHeader>
       <CardContent>
+        <BrowserPushSetting registeredHere={pushRegisteredHere} />
         {rows === null ? (
           <p className="text-sm text-muted-foreground">
             Couldn't load your notification preferences. Try again later.
@@ -326,7 +343,6 @@ function NotificationsSection({
                 </span>
               ))}
             </div>
-            {/* The browser push row for this browser goes here, above the event rows. */}
             {rows.map((row) => (
               <NotificationPreferenceLine key={row.workflowKey} row={row} />
             ))}
@@ -334,6 +350,27 @@ function NotificationsSection({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+const COULD_NOT_TURN_ON_PUSH = "Couldn't turn on browser push. Try again.";
+
+/** The "Browser push in this browser" row, wired to the browser. */
+function BrowserPushSetting({ registeredHere }: { registeredHere: boolean }) {
+  const push = useBrowserPush({ registeredHere });
+  if (!push) return null;
+
+  return (
+    <BrowserPushRow
+      status={push.status}
+      turningOn={push.turningOn}
+      onTurnOn={() => {
+        push.turnOn().catch((error: unknown) => {
+          console.error("[notifications] Couldn't turn on browser push:", error);
+          toast.error(COULD_NOT_TURN_ON_PUSH);
+        });
+      }}
+    />
   );
 }
 

@@ -17,6 +17,12 @@ describe("choosing the Knock-facing interface at startup", () => {
       KNOCK_SECRET_KEY: "sk_test_secret",
       KNOCK_PUBLIC_KEY: "pk_test_public",
       KNOCK_IN_APP_CHANNEL_ID: "in-app-channel-uuid",
+      KNOCK_FCM_CHANNEL_ID: "fcm-channel-uuid",
+      FIREBASE_API_KEY: "firebase-api-key",
+      FIREBASE_PROJECT_ID: "cadence-dev",
+      FIREBASE_MESSAGING_SENDER_ID: "1234567890",
+      FIREBASE_APP_ID: "1:1234567890:web:abc",
+      FIREBASE_VAPID_KEY: "vapid-public-key",
     });
     await transport.trigger(
       "refund-request-decided",

@@ -99,6 +99,13 @@
       "when": 1794583498711,
       "tag": "0013_notification_job_order",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1794621060602,
+      "tag": "0014_push_registrations",
+      "breakpoints": true
     }
   ]
 }

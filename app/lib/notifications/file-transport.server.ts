@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   defaultNotificationPreferences,
@@ -34,10 +34,12 @@ export function createFileTransport({
   notificationsDir = path.join(OUTBOX_DIR, "notifications"),
   archivesDir = path.join(OUTBOX_DIR, "bulk-archives"),
   preferencesDir = path.join(OUTBOX_DIR, "notification-preferences"),
+  pushTokensDir = path.join(OUTBOX_DIR, "push-tokens"),
 }: {
   notificationsDir?: string;
   archivesDir?: string;
   preferencesDir?: string;
+  pushTokensDir?: string;
 } = {}): NotificationTransport {
   function preferencesFile(userId: string) {
     return path.join(preferencesDir, `${encodeURIComponent(userId)}.json`);
@@ -71,6 +73,18 @@ export function createFileTransport({
 
     async bulkArchive(selector) {
       await writeJson(archivesDir, selector.workflowKey, selector);
+    },
+
+    // One file per person, holding their whole list, as Knock does. An
+    // empty list unsets it, so the file goes.
+    async setPushTokens(userId, tokens) {
+      const file = path.join(pushTokensDir, `${encodeURIComponent(userId)}.json`);
+      if (tokens.length === 0) {
+        await rm(file, { force: true });
+        return;
+      }
+      await mkdir(pushTokensDir, { recursive: true });
+      await writeFile(file, `${JSON.stringify({ tokens }, null, 2)}\n`);
     },
 
     preferences: {

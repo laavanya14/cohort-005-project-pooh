@@ -17,6 +17,7 @@ export function createNotificationTransport(
   return createKnockTransport({
     secretKey: knock.secretKey,
     inAppChannelId: knock.inAppChannelId,
+    fcmChannelId: knock.fcmChannelId,
   });
 }
 
