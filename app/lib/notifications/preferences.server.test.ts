@@ -58,7 +58,7 @@ describe("notification preferences", () => {
       ]);
     });
 
-    it("shows a platform admin new open refund requests with Push only", async () => {
+    it("shows a platform admin new open refund requests with Push only, and replies from the instructor or a platform admin with Push and Email", async () => {
       const platformAdmin = seedPlatformAdmin();
       const knock = createRecordingTransport();
 
@@ -69,8 +69,30 @@ describe("notification preferences", () => {
             label: "New open refund request",
             switches: { push: true },
           },
+          {
+            workflowKey: "instructor-or-platform-admin-reply",
+            label: "A reply from the instructor or a platform admin",
+            switches: { push: true, email: true },
+          },
         ]
       );
+    });
+
+    it("lets a platform admin turn off email for replies to their comments", async () => {
+      const platformAdmin = seedPlatformAdmin();
+      const knock = createRecordingTransport();
+
+      await setNotificationPreference(knock, platformAdmin.id, {
+        workflowKey: "instructor-or-platform-admin-reply",
+        channel: "email",
+        on: false,
+      });
+
+      const [, replies] = await listNotificationPreferences(
+        knock,
+        platformAdmin.id
+      );
+      expect(replies?.switches).toEqual({ push: true, email: false });
     });
   });
 

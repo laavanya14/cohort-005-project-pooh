@@ -70,6 +70,11 @@ const ROWS_BY_ROLE: Record<UserRole, PreferenceRowDefinition[]> = {
       label: "New open refund request",
       channels: ["push"],
     },
+    {
+      workflowKey: "instructor-or-platform-admin-reply",
+      label: "A reply from the instructor or a platform admin",
+      channels: ["push", "email"],
+    },
   ],
 };
 
