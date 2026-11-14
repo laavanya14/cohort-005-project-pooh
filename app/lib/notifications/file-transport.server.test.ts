@@ -97,6 +97,28 @@ describe("the file-writing notification fake", () => {
     });
   });
 
+  it("writes one JSON file per bulk mark read, named by time and the person's id", async () => {
+    const markReadsDir = path.join(outboxDir(), "bulk-mark-reads");
+    const transport = createFileTransport({ markReadsDir });
+
+    await transport.bulkMarkRead({
+      recipientId: "12",
+      key: "notificationId",
+      value: "notification-1",
+    });
+
+    const files = readdirSync(markReadsDir);
+    expect(files).toHaveLength(1);
+    expect(files[0]).toMatch(/^\d{4}-\d{2}-\d{2}T[\d-]+Z-12\.json$/);
+    expect(
+      JSON.parse(readFileSync(path.join(markReadsDir, files[0]), "utf8"))
+    ).toEqual({
+      recipientId: "12",
+      key: "notificationId",
+      value: "notification-1",
+    });
+  });
+
   it("starts each person's notification preferences with every channel on", async () => {
     const transport = createFileTransport({
       preferencesDir: path.join(outboxDir(), "notification-preferences"),

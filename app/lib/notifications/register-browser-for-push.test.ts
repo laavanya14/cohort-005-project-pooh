@@ -39,7 +39,9 @@ beforeEach(() => {
     configurable: true,
     value: { register: async () => ({}) },
   });
-  fetchMock.mockResolvedValue(Response.json({ registrationId: 42 }));
+  fetchMock.mockResolvedValue(
+    Response.json({ registrationId: 42, userId: 7 })
+  );
 });
 
 afterEach(() => {

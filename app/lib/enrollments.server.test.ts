@@ -102,6 +102,7 @@ describe("the new enrollment notification", () => {
           studentName: "Test User",
           path: `/instructor/${course.id}/students`,
           notificationId: expect.any(String),
+          pushPath: expect.any(String),
         },
       }),
     ]);

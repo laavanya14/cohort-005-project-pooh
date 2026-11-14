@@ -8,10 +8,13 @@ import type { RenderToPipeableStreamOptions } from "react-dom/server";
 import { renderToPipeableStream } from "react-dom/server";
 import { getNotificationTransport } from "~/lib/notifications/create-transport.server";
 import { startNotificationOutbox } from "~/lib/notifications/outbox.server";
+import { startPushRegistrationPruning } from "~/lib/push-registrations.server";
 
-// React Router's default server entry, plus one addition: the server process
-// sends the notification outbox, straight after each action and on a timer.
+// React Router's default server entry, plus two additions: the server process
+// sends the notification outbox, straight after each action and on a timer,
+// and once a day drops push registrations not seen for 30 days.
 startNotificationOutbox({ transport: getNotificationTransport() });
+startPushRegistrationPruning();
 
 export const streamTimeout = 5_000;
 

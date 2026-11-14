@@ -211,6 +211,7 @@ describe("comment notifications", () => {
         actor: expect.objectContaining({ id: String(student.id) }),
         data: {
           notificationId: expect.any(String),
+          pushPath: expect.any(String),
           path: "/instructor/questions",
           lessonTitle: "Lesson 1",
           courseTitle: "Test Course",
@@ -277,6 +278,7 @@ describe("comment notifications", () => {
           actor: expect.objectContaining({ id: String(answerer.id) }),
           data: {
             notificationId: expect.any(String),
+            pushPath: expect.any(String),
             path: `/courses/${course.slug}/lessons/${lesson.id}#comment-${reply.id}`,
             lessonTitle: "Lesson 1",
             courseTitle: "Test Course",
@@ -287,6 +289,31 @@ describe("comment notifications", () => {
       ]);
     }
   );
+
+  it("opens the reply from its push, with the notification id before the anchor", async () => {
+    const { student, instructor, course, lesson } = seedLessons();
+    const { comment: question } = createComment(
+      student.id,
+      lesson.id,
+      null,
+      "How do I start?"
+    );
+    await sendToKnock();
+
+    const { comment: reply } = createComment(
+      instructor.id,
+      lesson.id,
+      question.id,
+      "Open the first lesson."
+    );
+
+    const [trigger] = await sendToKnock();
+    expect(trigger?.data.pushPath).toBe(
+      `/courses/${course.slug}/lessons/${lesson.id}` +
+        `?notification=${String(trigger?.data.notificationId)}` +
+        `#comment-${reply.id}`
+    );
+  });
 
   it.each([
     [
@@ -333,6 +360,7 @@ describe("comment notifications", () => {
           actor: expect.objectContaining({ id: String(otherStudent.id) }),
           data: {
             notificationId: expect.any(String),
+            pushPath: expect.any(String),
             path: `/courses/${course.slug}/lessons/${lesson.id}#comment-${reply.id}`,
             lessonTitle: "Lesson 1",
             courseTitle: "Test Course",

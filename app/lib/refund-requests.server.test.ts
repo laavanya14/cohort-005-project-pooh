@@ -251,6 +251,7 @@ describe("the refund request decided notification", () => {
         decisionNote: "Sorry it wasn't a fit.",
         path: "/courses/test-course",
         notificationId: expect.any(String),
+        pushPath: expect.any(String),
       },
     });
     expect(decline).toMatchObject({
@@ -261,6 +262,7 @@ describe("the refund request decided notification", () => {
         decisionNote: "Most lessons watched.",
         path: "/courses/test-course",
         notificationId: expect.any(String),
+        pushPath: expect.any(String),
       },
     });
   });
@@ -376,6 +378,7 @@ describe("the new open refund request notification", () => {
         reason: "Bought it twice.",
         path: "/admin/refund-requests",
         notificationId: expect.any(String),
+        pushPath: expect.any(String),
       },
     });
     expect(notification.recipients).toEqual([
@@ -525,6 +528,7 @@ describe("the enrollment ended notification", () => {
           studentName: "Test User",
           path: `/instructor/${course.id}/students`,
           notificationId: expect.any(String),
+          pushPath: expect.any(String),
         },
       }),
     ]);

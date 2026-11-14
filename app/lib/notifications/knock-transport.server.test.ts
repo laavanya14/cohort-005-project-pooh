@@ -136,6 +136,52 @@ describe("the real Knock adapter", () => {
     ).rejects.toThrow(/500.*Internal error/);
   });
 
+  it("bulk marks read one person's in-app copy picked by a trigger-data key and value the way Knock expects", async () => {
+    const fetchMock = knockAnswering(200, { id: "bulk-2", status: "queued" });
+    const transport = createKnockTransport({
+      secretKey: "sk_test_secret",
+      inAppChannelId: "in-app-channel-uuid",
+      fcmChannelId: "fcm-channel-uuid",
+      fetch: fetchMock,
+    });
+
+    await transport.bulkMarkRead({
+      recipientId: "12",
+      key: "notificationId",
+      value: "notification-1",
+    });
+
+    const call = onlyCall(fetchMock);
+    expect(call.method).toBe("POST");
+    expect(call.url).toBe(
+      "https://api.knock.app/v1/channels/in-app-channel-uuid/messages/bulk/read"
+    );
+    expect(call.headers.get("authorization")).toBe("Bearer sk_test_secret");
+    expect(call.headers.get("content-type")).toBe("application/json");
+    // Only this person's copy: no one else's is marked read.
+    expect(call.body).toEqual({
+      trigger_data: '{"notificationId":"notification-1"}',
+      recipient_ids: ["12"],
+    });
+  });
+
+  it("rejects when Knock doesn't accept the bulk mark read, so the outbox tries again", async () => {
+    const transport = createKnockTransport({
+      secretKey: "sk_test_secret",
+      inAppChannelId: "in-app-channel-uuid",
+      fcmChannelId: "fcm-channel-uuid",
+      fetch: knockAnswering(500, { message: "Internal error" }),
+    });
+
+    await expect(
+      transport.bulkMarkRead({
+        recipientId: "12",
+        key: "notificationId",
+        value: "notification-1",
+      })
+    ).rejects.toThrow(/500.*Internal error/);
+  });
+
   it("rejects when Knock can't be reached", async () => {
     const transport = createKnockTransport({
       secretKey: "sk_test_secret",
