@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, lt } from "drizzle-orm";
 import { db } from "~/db";
 import type { DbExecutor } from "~/db/executor";
 import { pushRegistrations } from "~/db/schema";
@@ -6,6 +6,7 @@ import {
   enqueueNotificationJob,
   sendNotificationJobsSoon,
 } from "~/lib/notifications/outbox.server";
+import type { BrowserPushRegistration } from "~/lib/notifications/push-upkeep";
 
 // Push registrations: the browsers each person turned on push in. Cadence's
 // table is the source of truth (docs/adr/0014). Every change queues a sync
@@ -125,6 +126,96 @@ export function removePushRegistration(
     if (removed.changes > 0) syncPushTokens(tx, userId);
   });
   sendNotificationJobsSoon();
+}
+
+/** How long a browser can go unseen before its registration is dropped. */
+const PRUNE_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Deletes the registrations of browsers not seen for 30 days (a browser is
+ * seen when it registers or refreshes its token), and queues a sync of each
+ * affected person's token list.
+ */
+export function prunePushRegistrations(
+  { now = new Date() }: { now?: Date } = {},
+  executor: DbExecutor = db
+) {
+  const cutoff = new Date(now.getTime() - PRUNE_AFTER_MS).toISOString();
+
+  executor.transaction((tx) => {
+    const pruned = tx
+      .delete(pushRegistrations)
+      .where(lt(pushRegistrations.lastSeenAt, cutoff))
+      .returning({ userId: pushRegistrations.userId })
+      .all();
+    for (const userId of new Set(pruned.map((row) => row.userId))) {
+      syncPushTokens(tx, userId);
+    }
+  });
+  sendNotificationJobsSoon();
+}
+
+/** How often the server process prunes registrations. */
+const PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+// Kept on globalThis so a dev-server reload replaces the timer rather than
+// starting a second one.
+const pruningGlobal = globalThis as typeof globalThis & {
+  __cadencePushRegistrationPruning?: () => void;
+};
+
+/**
+ * Prunes registrations not seen for 30 days now and then once a day, from
+ * this server process. Returns a function that stops it.
+ */
+export function startPushRegistrationPruning() {
+  pruningGlobal.__cadencePushRegistrationPruning?.();
+
+  function prune() {
+    try {
+      prunePushRegistrations();
+    } catch (error) {
+      console.error("[notifications] Couldn't prune push registrations:", error);
+    }
+  }
+
+  prune();
+  const timer = setInterval(prune, PRUNE_INTERVAL_MS);
+  const stop = () => {
+    clearInterval(timer);
+    if (pruningGlobal.__cadencePushRegistrationPruning === stop) {
+      pruningGlobal.__cadencePushRegistrationPruning = undefined;
+    }
+  };
+  pruningGlobal.__cadencePushRegistrationPruning = stop;
+  return stop;
+}
+
+/**
+ * This browser's registration (from the session), if it's the person's: its
+ * token and when it was last seen, for the browser's refresh on app load.
+ */
+export function pushRegistrationHere(
+  { userId, registrationId }: { userId: number; registrationId: number | null },
+  executor: DbExecutor = db
+): BrowserPushRegistration | null {
+  if (registrationId === null) return null;
+
+  return (
+    executor
+      .select({
+        token: pushRegistrations.token,
+        lastSeenAt: pushRegistrations.lastSeenAt,
+      })
+      .from(pushRegistrations)
+      .where(
+        and(
+          eq(pushRegistrations.id, registrationId),
+          eq(pushRegistrations.userId, userId)
+        )
+      )
+      .get() ?? null
+  );
 }
 
 /** Whether this browser's registration (from the session) is the person's. */

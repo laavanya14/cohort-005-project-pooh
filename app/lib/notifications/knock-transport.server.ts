@@ -9,9 +9,9 @@ import type {
 // the secret key it is handed, so nothing is ever picked up from the
 // environment (the Knock Node SDK would read KNOCK_API_KEY by itself).
 //
-// Each method is one Knock call made through `callKnock`. To add one (bulk
-// mark read), add it to `NotificationTransport`, then here, the file fake
-// and the recording fake.
+// Each method is one Knock call made through `callKnock`. To add one, add it
+// to `NotificationTransport`, then here, the file fake and the recording
+// fake.
 
 const KNOCK_API = "https://api.knock.app";
 
@@ -154,6 +154,18 @@ export function createKnockTransport({
         body: {
           trigger_data: JSON.stringify({ [key]: value }),
           workflows: [workflowKey],
+        },
+      });
+    },
+
+    async bulkMarkRead({ recipientId, key, value }) {
+      await callKnock({
+        method: "POST",
+        path: `/v1/channels/${encodeURIComponent(inAppChannelId)}/messages/bulk/read`,
+        // Without recipient_ids Knock would mark everyone's copies read.
+        body: {
+          trigger_data: JSON.stringify({ [key]: value }),
+          recipient_ids: [recipientId],
         },
       });
     },

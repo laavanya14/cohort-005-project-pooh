@@ -33,11 +33,13 @@ async function writeJson(dir: string, name: string, contents: unknown) {
 export function createFileTransport({
   notificationsDir = path.join(OUTBOX_DIR, "notifications"),
   archivesDir = path.join(OUTBOX_DIR, "bulk-archives"),
+  markReadsDir = path.join(OUTBOX_DIR, "bulk-mark-reads"),
   preferencesDir = path.join(OUTBOX_DIR, "notification-preferences"),
   pushTokensDir = path.join(OUTBOX_DIR, "push-tokens"),
 }: {
   notificationsDir?: string;
   archivesDir?: string;
+  markReadsDir?: string;
   preferencesDir?: string;
   pushTokensDir?: string;
 } = {}): NotificationTransport {
@@ -73,6 +75,14 @@ export function createFileTransport({
 
     async bulkArchive(selector) {
       await writeJson(archivesDir, selector.workflowKey, selector);
+    },
+
+    async bulkMarkRead(selector) {
+      await writeJson(
+        markReadsDir,
+        encodeURIComponent(selector.recipientId),
+        selector
+      );
     },
 
     // One file per person, holding their whole list, as Knock does. An

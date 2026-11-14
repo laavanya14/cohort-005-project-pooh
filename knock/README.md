@@ -54,12 +54,12 @@ npx @knocklabs/cli commit promote --to production
          "badge": "https://<host>/icons/badge-96.png",
          "tag": "{{ data.notificationId }}"
        },
-       "fcm_options": { "link": "https://<host>{{ data.path }}" }
+       "fcm_options": { "link": "https://<host>{{ data.pushPath }}" }
      }
    }
    ```
 
-   The link opens the page the notification is about. The `tag` is the notification's id, so a repeat delivery replaces the earlier one, and the TTL (3 days, in seconds) drops a push that can't be delivered in time. Leave out `requireInteraction` and `actions`. Cadence's `/sw.js` has no `notificationclick` handler: Firebase focuses a tab already on the link, or opens one.
+   The link opens the page the notification is about. `data.pushPath` is the notification's `path` with `?notification=<notificationId>` put before any `#comment-…` anchor (Cadence builds it in `notify`, with `pushClickPath` in `app/lib/notifications/push-click.ts`), so the app marks the inbox copy read on arrival. The `tag` is the notification's id, so a repeat delivery replaces the earlier one, and the TTL (3 days, in seconds) drops a push that can't be delivered in time. Leave out `requireInteraction` and `actions`. Cadence's `/sw.js` has no `notificationclick` handler: Firebase focuses a tab already on the link, or opens one.
 
    If the first test send (below) shows no system notification, Knock isn't putting the title and body where Firebase's service worker reads them. Add them to the same override:
 
@@ -104,6 +104,10 @@ The table is the source of truth (`docs/adr/0014`). Every change queues a `setPu
 
 Signing out (`app/routes/api.logout.ts`) and switching users in the DevUI (`app/routes/api.switch-user.ts`) go through `app/lib/sign-out.server.ts`: it reads the registration id from the session before changing it, deletes that row and queues the sync, so push stops even if the browser's JavaScript never runs. The browser also calls Firebase's `deleteToken()` when it can.
 
+Push keeps working on its own (`useKeepBrowserPushCurrent` in `app/lib/notifications/use-push-upkeep.ts`, run by the app layout; the rules are in `push-upkeep.ts`). On each app load, a browser registered for the person signed in calls `getToken()` again and sends the token only if it changed or was last seen more than a day ago. The browser keeps a local-storage list of the people who turned on push in it (`push-turned-on-here.ts`); when one of them signs in and permission is still granted, it registers again without asking. Someone else on the same browser isn't registered until they turn push on. Once a day, and when the server starts, registrations not seen for 30 days are deleted and each affected person's list is synced (`prunePushRegistrations`).
+
+Clicking a push opens `pushPath`. The app layout's loader (`app/routes/layout.app.tsx`, through `pushClickRedirect` in `app/lib/notifications/push-click.server.ts`) queues a bulk mark read of the signed-in person's copy selected by `notificationId` (`POST /v1/channels/{in-app channel id}/messages/bulk/read` with `trigger_data` and `recipient_ids`), then redirects to the URL without `?notification=`; the browser keeps any `#comment-…` anchor. Without Knock keys, each bulk mark read is written to `.outbox/bulk-mark-reads/`.
+
 The manifest (`public/manifest.webmanifest`) and the icons in `public/icons/` (192 and 512 px app icons, the `apple-touch-icon` and the 96 px single-colour badge the FCM channel uses) were drawn by a script as plain placeholders; replace them with designed ones whenever there are some, keeping the file names.
 
 ## Checking by hand
@@ -114,8 +118,9 @@ Browser push, the first time and whenever the push setup changes (on `http://loc
 
 1. Sign in as the buyer in the DevUI, open Settings → Notifications and press **Turn on browser push**. Allow the browser's prompt. The row says On, and Knock's development environment shows the token on the buyer (Users > the buyer > Channel data > `fcm`).
 2. In another browser profile, sign in as a platform admin and decide the buyer's refund request at `/admin/refund-requests`. Switch the buyer's tab to another app or close it: Firebase shows a notification only when no Cadence tab is in front.
-3. Confirm a system notification titled "We approved your refund request" (or declined) with the course and note as its body and the Cadence icon, and that clicking it opens the course page.
+3. Confirm a system notification titled "We approved your refund request" (or declined) with the course and note as its body and the Cadence icon, and that clicking it opens the course page at its clean URL (no `?notification=`). Open the buyer's Inbox: that notification is read.
 4. If nothing shows, open the push in Knock (Messages) and look where the title and body landed in the FCM request. Add `webpush.notification.title` and `body` to the channel override (setup step 4) and try again. Write down here which was needed.
 5. Sign out as the buyer, decide another refund request, and confirm no notification arrives in that browser.
+6. Sign back in as the buyer in the same browser: Settings → Notifications says On again without a prompt. Sign in as someone else there instead, and their row says Off.
 
 Raising a refund request sends `new-open-refund-request` to every platform admin. Deciding or withdrawing it bulk archives every copy, selected by `refundRequestId` (Knock matches the value's type too, so it's always a number). Without Knock keys, each bulk archive is written to `.outbox/bulk-archives/`.

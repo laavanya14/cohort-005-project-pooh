@@ -100,6 +100,7 @@ describe("the new or changed rating notification", () => {
           rating: 4,
           path: "/courses/test-course",
           notificationId: expect.any(String),
+          pushPath: expect.any(String),
         },
       }),
     ]);

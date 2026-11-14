@@ -6,6 +6,7 @@ import type {
   InAppMessageSelector,
   NotificationPreferences,
   NotificationTransport,
+  RecipientMessageSelector,
   TriggerRequest,
 } from "~/lib/notifications/transport";
 
@@ -18,6 +19,7 @@ export type RecordedTrigger = TriggerRequest & {
 export type RecordedCall =
   | ({ method: "trigger" } & RecordedTrigger)
   | ({ method: "bulkArchive" } & InAppMessageSelector)
+  | ({ method: "bulkMarkRead" } & RecipientMessageSelector)
   | { method: "setPushTokens"; userId: string; tokens: string[] };
 
 /** One `preferences.set` call Knock accepted. */
@@ -28,8 +30,8 @@ export type RecordedPreferenceChange = {
 
 /**
  * An in-memory stand-in for Knock. It records every trigger it accepts in
- * `triggers`, every bulk archive in `archives`, and those and every push
- * token write in `calls`, in the order it accepted them. `pushTokens` holds
+ * `triggers`, every bulk archive in `archives`, every bulk mark read in
+ * `markReads`, and those and every push token write in `calls`, in the order it accepted them. `pushTokens` holds
  * the token list Knock has for each person who has one (writing an empty
  * list unsets it). `attempts` holds every trigger it was asked for,
  * accepted or not. Each person's preferences start from the defaults, and
@@ -40,6 +42,7 @@ export function createRecordingTransport() {
   const triggers: RecordedTrigger[] = [];
   const attempts: RecordedTrigger[] = [];
   const archives: InAppMessageSelector[] = [];
+  const markReads: RecipientMessageSelector[] = [];
   const calls: RecordedCall[] = [];
   const preferenceChanges: RecordedPreferenceChange[] = [];
   const preferencesByUser = new Map<string, NotificationPreferences>();
@@ -60,6 +63,7 @@ export function createRecordingTransport() {
     triggers: RecordedTrigger[];
     attempts: RecordedTrigger[];
     archives: InAppMessageSelector[];
+    markReads: RecipientMessageSelector[];
     calls: RecordedCall[];
     preferenceChanges: RecordedPreferenceChange[];
     pushTokens: Map<string, string[]>;
@@ -68,6 +72,7 @@ export function createRecordingTransport() {
     triggers,
     attempts,
     archives,
+    markReads,
     calls,
     preferenceChanges,
     pushTokens,
@@ -85,6 +90,11 @@ export function createRecordingTransport() {
       if (knockIsDown()) throw new Error("Knock is unavailable.");
       archives.push({ ...selector });
       calls.push({ method: "bulkArchive", ...selector });
+    },
+    async bulkMarkRead(selector) {
+      if (knockIsDown()) throw new Error("Knock is unavailable.");
+      markReads.push({ ...selector });
+      calls.push({ method: "bulkMarkRead", ...selector });
     },
     async setPushTokens(userId, tokens) {
       if (knockIsDown()) throw new Error("Knock is unavailable.");

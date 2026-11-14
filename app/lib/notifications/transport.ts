@@ -2,9 +2,6 @@
 // The real version calls Knock's API; without KNOCK_SECRET_KEY a fake writes
 // files under .outbox/, and tests record calls in memory. Whichever is used
 // is always passed in explicitly, never picked up by default.
-//
-// Bulk mark read by a trigger-data key joins `trigger`, `bulkArchive`,
-// `setPushTokens` and `preferences` here when the ticket that needs it lands.
 
 /** A person as Knock sees them. `id` is Cadence's user id. */
 export type NotificationRecipient = {
@@ -26,6 +23,17 @@ export type TriggerRequest = {
  */
 export type InAppMessageSelector = {
   workflowKey: string;
+  key: string;
+  value: string | number;
+};
+
+/**
+ * Picks one person's in-app messages whose trigger data has `key` equal to
+ * `value`, from any workflow. `recipientId` is Cadence's user id. Knock
+ * matches the value exactly, including its type.
+ */
+export type RecipientMessageSelector = {
+  recipientId: string;
   key: string;
   value: string | number;
 };
@@ -59,6 +67,13 @@ export type NotificationTransport = {
    * to. Doing it twice is harmless. Rejects when Knock doesn't accept it.
    */
   bulkArchive(selector: InAppMessageSelector): Promise<void>;
+
+  /**
+   * Marks read the person's in-app messages the selector picks, such as the
+   * inbox copy of a push they clicked. Doing it twice is harmless. Rejects
+   * when Knock doesn't accept it.
+   */
+  bulkMarkRead(selector: RecipientMessageSelector): Promise<void>;
 
   /**
    * Replaces the browser push tokens Knock holds for a person with `tokens`,
