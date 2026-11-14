@@ -18,11 +18,15 @@ import {
   type InboxKind,
   type InboxNotification,
 } from "~/lib/notifications/inbox-items";
+import {
+  InboxPushAskCard,
+  type InboxPushAskProps,
+} from "~/components/push-asks";
 
 // The Inbox drawer, display only: it shows what it's given and reports what
 // the person did through callbacks. It never talks to Knock. The wrapper in
-// `inbox.tsx` connects it to Knock's headless hooks. To add to it (such as
-// the push-ask card), add a prop here and pass it from there.
+// `inbox.tsx` connects it to Knock's headless hooks. To add to it, add a prop
+// here and pass it from there.
 
 /** The Notifications section of Settings, where the header's gear goes. */
 export const NOTIFICATION_PREFERENCES_PATH = "/settings#notifications";
@@ -60,6 +64,8 @@ export type InboxDrawerProps = {
   onLoadMore: (tab: InboxTabKey) => void;
   /** The person followed the header's gear to the Notifications section. */
   onOpenNotificationPreferences: () => void;
+  /** The ask to turn on browser push, shown above the tabs when there is one. */
+  pushAsk?: InboxPushAskProps;
 };
 
 function hasNotifications(tab: InboxTab) {
@@ -359,7 +365,14 @@ export function InboxDrawer(props: InboxDrawerProps) {
           </div>
         </div>
 
-        {knockConfigured ? <InboxTabs {...props} now={now} /> : <KnockNotice />}
+        {knockConfigured ? (
+          <>
+            {props.pushAsk && <InboxPushAskCard {...props.pushAsk} />}
+            <InboxTabs {...props} now={now} />
+          </>
+        ) : (
+          <KnockNotice />
+        )}
       </aside>
     </>
   );

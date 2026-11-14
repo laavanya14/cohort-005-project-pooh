@@ -4,7 +4,17 @@ import { Sidebar } from "~/components/sidebar";
 import { DevUI } from "~/components/dev-ui";
 import { Inbox } from "~/components/inbox/inbox";
 import { Toaster } from "sonner";
-import { getCurrentUserId, getDevCountry } from "~/lib/session";
+import { PushAsksProvider } from "~/components/push-asks-provider";
+import {
+  getCurrentUserId,
+  getDevCountry,
+  getPushRegistrationId,
+} from "~/lib/session";
+import { isRegisteredForPush } from "~/lib/push-registrations.server";
+import { readNotificationConfig } from "~/lib/notifications/config.server";
+import { getNotificationTransport } from "~/lib/notifications/create-transport.server";
+import { listNotificationPreferences } from "~/lib/notifications/preferences.server";
+import { isPushOffForEveryEvent } from "~/lib/notifications/push-ask";
 import { getCountryTierInfo, COUNTRIES } from "~/lib/ppp";
 import { eq, and, or, sql, desc } from "drizzle-orm";
 import { db } from "~/db";
@@ -214,6 +224,37 @@ export async function loader({ request }: Route.LoaderArgs) {
     countryTierInfo,
     countries: COUNTRIES,
     isTeamAdmin: currentUserId ? isTeamAdmin(currentUserId) : false,
+    pushAsks: currentUserId ? await pushAskFacts(request, currentUserId) : null,
+  };
+}
+
+/**
+ * What the server knows for the push asks. Whether push is off for every
+ * event comes from Knock, so it's streamed: no page waits on Knock for it.
+ */
+async function pushAskFacts(request: Request, userId: number) {
+  const registeredHere = isRegisteredForPush({
+    userId,
+    registrationId: await getPushRegistrationId(request),
+  });
+  // Without Knock there are no asks, so there's nothing to read.
+  const needsPreferences =
+    !registeredHere && readNotificationConfig().knock !== null;
+
+  return {
+    registeredHere,
+    pushOffForEveryEvent: needsPreferences
+      ? listNotificationPreferences(getNotificationTransport(), userId)
+          .then(isPushOffForEveryEvent)
+          .catch((error: unknown) => {
+            // The asks still show; the Settings row works either way.
+            console.error(
+              "[notifications] Couldn't read notification preferences:",
+              error
+            );
+            return false;
+          })
+      : Promise.resolve(false),
   };
 }
 
@@ -226,9 +267,10 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     countryTierInfo,
     countries,
     isTeamAdmin: userIsTeamAdmin,
+    pushAsks,
   } = loaderData;
 
-  return (
+  const page = (
     <div className="flex h-screen overflow-hidden">
       <Sidebar
         currentUser={currentUser}
@@ -248,5 +290,18 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
       />
       <Toaster position="bottom-right" richColors closeButton />
     </div>
+  );
+
+  if (!currentUser || !pushAsks) return page;
+
+  return (
+    <PushAsksProvider
+      userId={currentUser.id}
+      role={currentUser.role}
+      registeredHere={pushAsks.registeredHere}
+      pushOffForEveryEvent={pushAsks.pushOffForEveryEvent}
+    >
+      {page}
+    </PushAsksProvider>
   );
 }

@@ -11,6 +11,10 @@ import {
   getRefundEligibility,
   sendRefundRequestEmail,
 } from "~/lib/refund-requests.server";
+import {
+  REFUND_REQUEST_SENT_PARAM,
+  REFUND_REQUEST_SENT_VALUE,
+} from "~/lib/notifications/push-ask";
 
 const refundRequestParamsSchema = z.object({
   slug: z.string().min(1),
@@ -61,5 +65,9 @@ export async function action({ params, request }: Route.ActionArgs) {
   );
   sendRefundRequestEmail(refundRequest.id);
 
-  return redirect("/settings");
+  // The page asks the student whether to get push when it's decided
+  // (PushAsksProvider).
+  return redirect(
+    `/settings?${REFUND_REQUEST_SENT_PARAM}=${REFUND_REQUEST_SENT_VALUE}`
+  );
 }

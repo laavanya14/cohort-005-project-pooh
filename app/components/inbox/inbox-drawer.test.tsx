@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
@@ -10,7 +10,9 @@ import {
   type InboxTab,
   type InboxTabKey,
 } from "./inbox-drawer";
+import type { InboxPushAskProps } from "~/components/push-asks";
 import type { InboxNotification } from "~/lib/notifications/inbox-items";
+import { UserRole } from "~/db/schema";
 
 const NOW = new Date("2026-11-13T12:00:00Z");
 
@@ -436,5 +438,115 @@ describe("InboxSidebarItem", () => {
     expect(screen.getByRole("button", { name: "Inbox" })).toHaveTextContent(
       /^Inbox$/
     );
+  });
+});
+
+describe("InboxDrawer push-ask card", () => {
+  function pushAsk(
+    overrides: Partial<InboxPushAskProps> = {}
+  ): InboxPushAskProps {
+    return {
+      ask: "normal",
+      role: UserRole.Student,
+      turningOn: false,
+      onTurnOn: () => {},
+      onNotNow: () => {},
+      onShowMeHow: () => {},
+      ...overrides,
+    };
+  }
+
+  function card() {
+    return screen.queryByRole("region", {
+      name: "Turn on browser notifications",
+    });
+  }
+
+  it("tells a student they'll hear when a refund request is decided or someone replies", () => {
+    renderDrawer({ pushAsk: pushAsk({ role: UserRole.Student }) });
+
+    expect(card()).toHaveTextContent(
+      "Get a browser notification when a refund request is decided or someone replies to you"
+    );
+  });
+
+  it("tells an instructor they'll hear when a student asks a question", () => {
+    renderDrawer({ pushAsk: pushAsk({ role: UserRole.Instructor }) });
+
+    expect(card()).toHaveTextContent(
+      "Get a browser notification when a student asks a question"
+    );
+  });
+
+  it("tells a platform admin they'll hear when a refund request comes in or a refund fails", () => {
+    renderDrawer({ pushAsk: pushAsk({ role: UserRole.PlatformAdmin }) });
+
+    expect(card()).toHaveTextContent(
+      "Get a browser notification when a refund request comes in or a refund fails"
+    );
+  });
+
+  it("turns push on, or snoozes the asks, from the card", async () => {
+    const user = userEvent.setup();
+    const onTurnOn = vi.fn();
+    const onNotNow = vi.fn();
+    renderDrawer({ pushAsk: pushAsk({ onTurnOn, onNotNow }) });
+
+    await user.click(screen.getByRole("button", { name: "Turn on" }));
+    await user.click(screen.getByRole("button", { name: "Not now" }));
+
+    expect(onTurnOn).toHaveBeenCalledOnce();
+    expect(onNotNow).toHaveBeenCalledOnce();
+  });
+
+  it("says it's turning on while push is being turned on", () => {
+    renderDrawer({ pushAsk: pushAsk({ turningOn: true }) });
+
+    expect(screen.getByRole("button", { name: "Turning on…" })).toBeDisabled();
+  });
+
+  it("walks an iPhone or iPad through Add to Home Screen first", async () => {
+    const user = userEvent.setup();
+    const onShowMeHow = vi.fn();
+    renderDrawer({
+      pushAsk: pushAsk({ ask: "add-to-home-screen", onShowMeHow }),
+    });
+
+    expect(card()).toHaveTextContent(
+      "On iPhone and iPad, add Cadence to your Home Screen first."
+    );
+    expect(
+      screen.queryByRole("button", { name: "Turn on" })
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Show me how" }));
+    expect(onShowMeHow).toHaveBeenCalledOnce();
+  });
+
+  it.each(["hidden", "snoozed", "blocked"] as const)(
+    "shows no card when the ask is %s",
+    (ask) => {
+      renderDrawer({ pushAsk: pushAsk({ ask }) });
+
+      expect(card()).not.toBeInTheDocument();
+    }
+  );
+
+  it("shows no card without Knock", () => {
+    renderDrawer({ knockConfigured: false, pushAsk: pushAsk() });
+
+    expect(card()).not.toBeInTheDocument();
+  });
+
+  it("shows the card above the notifications", () => {
+    renderDrawer({
+      pushAsk: pushAsk(),
+      tabs: { ...emptyTabs(), "about-you": tab([notification()]) },
+    });
+
+    const shownCard = card();
+    expect(shownCard).toBeInTheDocument();
+    expect(
+      shownCard?.compareDocumentPosition(screen.getByRole("article"))
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 });
