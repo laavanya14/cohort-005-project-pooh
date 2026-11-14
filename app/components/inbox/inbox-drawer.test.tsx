@@ -65,6 +65,7 @@ function renderDrawer(overrides: Partial<InboxDrawerProps> = {}) {
     onArchive: () => {},
     onUnarchive: () => {},
     onLoadMore: () => {},
+    onOpenNotificationPreferences: () => {},
     ...overrides,
   };
   return render(<InboxDrawer {...props} />);
@@ -395,6 +396,26 @@ describe("InboxDrawer", () => {
 
     expect(closed).toBe(2);
   });
+
+  it.each([true, false])(
+    "links from its header to the Notifications section of Settings (Knock configured: %s)",
+    async (knockConfigured) => {
+      const user = userEvent.setup();
+      let opened = 0;
+      renderDrawer({
+        knockConfigured,
+        onOpenNotificationPreferences: () => opened++,
+      });
+
+      const gear = screen.getByRole("link", {
+        name: "Notification preferences",
+      });
+      expect(gear).toHaveAttribute("href", "/settings#notifications");
+      await user.click(gear);
+
+      expect(opened).toBe(1);
+    }
+  );
 });
 
 describe("InboxSidebarItem", () => {

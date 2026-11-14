@@ -6,12 +6,12 @@ import { ServerRouter } from "react-router";
 import { isbot } from "isbot";
 import type { RenderToPipeableStreamOptions } from "react-dom/server";
 import { renderToPipeableStream } from "react-dom/server";
-import { createNotificationTransport } from "~/lib/notifications/create-transport.server";
+import { getNotificationTransport } from "~/lib/notifications/create-transport.server";
 import { startNotificationOutbox } from "~/lib/notifications/outbox.server";
 
 // React Router's default server entry, plus one addition: the server process
 // sends the notification outbox, straight after each action and on a timer.
-startNotificationOutbox({ transport: createNotificationTransport() });
+startNotificationOutbox({ transport: getNotificationTransport() });
 
 export const streamTimeout = 5_000;
 

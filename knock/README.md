@@ -48,6 +48,20 @@ npx @knocklabs/cli commit promote --to production
    | `KNOCK_IN_APP_CHANNEL_ID` | Channels > the `in-app` channel's id for this environment |
 
    Setting `KNOCK_SECRET_KEY` without the rest stops the server at startup.
+5. **Default notification preferences.** In the environment's default preference set (Preferences > Default preference set, or the Management API), turn on every channel of each workflow below at the workflow level. This is what a person has until they change something on Settings → Notifications. Leave the workflows' "override preferences" setting off: it would lock push too.
+
+   | Workflow | Channel types on |
+   |---|---|
+   | `refund-request-decided` | push, email |
+   | `instructor-or-platform-admin-reply` | push, email |
+   | `student-top-level-comment` | push, email |
+   | `new-open-refund-request` | push |
+
+   The list is `WORKFLOW_CHANNELS` in `app/lib/notifications/preference-defaults.ts`; keep the two in step. Knock treats a missing preference as on, and so does Cadence, so forgetting this step changes nothing a person sees. It's still set, so Knock's dashboard shows the intended defaults.
+
+## Notification preferences
+
+Settings → Notifications (`app/routes/settings.tsx`, `#notifications`, which the Inbox drawer's gear opens) reads and writes each person's workflow-level preferences straight from Knock (`GET`/`PUT /v1/users/{id}/preferences/default`, merged), not through the outbox. The rows per role, and the rule that email for refund request decided, issued refund and failed refund can't be turned off, are in `app/lib/notifications/preferences.server.ts`. Without Knock keys, preferences are saved to `.outbox/notification-preferences/<userId>.json`, starting from the defaults.
 
 ## Checking by hand
 
