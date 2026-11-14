@@ -1,16 +1,60 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import { db } from "~/db";
 import type { DbExecutor } from "~/db/executor";
 import { coupons, courses, purchases, users } from "~/db/schema";
 import { enroll, isEnrolled } from "~/lib/enrollments.server";
 import { notify } from "~/lib/notifications/notify.server";
 
+/** Whether the purchase has seats, which makes it a team licence. */
+export function hasSeats(purchaseId: number, executor: DbExecutor = db) {
+  return !!executor
+    .select({ id: coupons.id })
+    .from(coupons)
+    .where(eq(coupons.purchaseId, purchaseId))
+    .get();
+}
+
+/** Whether anyone has claimed a seat on the team licence. */
+export function hasClaimedSeat(purchaseId: number, executor: DbExecutor = db) {
+  return !!executor
+    .select({ id: coupons.id })
+    .from(coupons)
+    .where(
+      and(eq(coupons.purchaseId, purchaseId), isNotNull(coupons.redeemedAt))
+    )
+    .get();
+}
+
+/** Whether the team licence still has a seat nobody has claimed. */
+function hasAvailableSeat(purchaseId: number, executor: DbExecutor) {
+  return !!executor
+    .select({ id: coupons.id })
+    .from(coupons)
+    .where(
+      and(eq(coupons.purchaseId, purchaseId), isNull(coupons.redeemedByUserId))
+    )
+    .get();
+}
+
+/** The seat the student claimed on the course, if they claimed one. */
+export function claimedSeatFor(
+  userId: number,
+  courseId: number,
+  executor: DbExecutor = db
+) {
+  return executor
+    .select({ id: coupons.id })
+    .from(coupons)
+    .where(
+      and(eq(coupons.redeemedByUserId, userId), eq(coupons.courseId, courseId))
+    )
+    .get();
+}
+
 /**
  * A student claims a seat through its seat link, and is enrolled in the
- * seat's course. The one place a seat is claimed.
- *
- * The result tells the caller who the team admin is (the team licence's
- * buyer) and whether this was the last available seat on the team licence.
+ * seat's course. The one place a seat is claimed. The team admin (the team
+ * licence's buyer) is told who claimed it.
  */
 export function claimSeat(
   code: string,
@@ -20,10 +64,13 @@ export function claimSeat(
 ) {
   return executor.transaction((tx) => {
     const seat = tx.select().from(coupons).where(eq(coupons.code, code)).get();
-    if (!seat) return { ok: false as const, error: "Coupon not found" };
+    if (!seat) return { ok: false as const, error: "Seat link not found" };
 
     if (seat.redeemedByUserId !== null) {
-      return { ok: false as const, error: "Coupon has already been redeemed" };
+      return {
+        ok: false as const,
+        error: "This seat has already been claimed",
+      };
     }
 
     if (isEnrolled(userId, seat.courseId, tx)) {
@@ -38,13 +85,14 @@ export function claimSeat(
       .from(purchases)
       .where(eq(purchases.id, seat.purchaseId))
       .get();
-    if (!teamLicence) return { ok: false as const, error: "Coupon not found" };
+    if (!teamLicence) {
+      return { ok: false as const, error: "Seat link not found" };
+    }
 
     if (teamLicence.country && teamLicence.country !== userCountry) {
       return {
         ok: false as const,
-        error:
-          "This coupon can only be redeemed from the same country as the purchaser",
+        error: "This seat can only be claimed from the buyer's country",
       };
     }
 
@@ -57,31 +105,14 @@ export function claimSeat(
 
     const enrollment = enroll(userId, seat.courseId, tx);
 
-    const availableSeat = tx
-      .select({ id: coupons.id })
-      .from(coupons)
-      .where(
-        and(
-          eq(coupons.purchaseId, teamLicence.id),
-          isNull(coupons.redeemedByUserId)
-        )
-      )
-      .get();
-
     notifySeatClaimed(tx, {
       seatHolderId: userId,
       teamAdminId: teamLicence.userId,
       courseId: seat.courseId,
-      wasLastAvailableSeat: !availableSeat,
+      wasLastAvailableSeat: !hasAvailableSeat(teamLicence.id, tx),
     });
 
-    return {
-      ok: true as const,
-      seat: claimedSeat,
-      enrollment,
-      teamAdminId: teamLicence.userId,
-      wasLastAvailableSeat: !availableSeat,
-    };
+    return { ok: true as const, seat: claimedSeat, enrollment };
   });
 }
 

@@ -1,7 +1,0 @@
-{
-  "key": "student-reply-copy",
-  "name": "Another student replies to your comment: headline and detail line",
-  "description": "The headline (part: 'headline') and detail line (part: 'detail') every student-reply template shows. Takes name, reply and lesson.",
-  "type": "text",
-  "content@": "content.txt"
-}

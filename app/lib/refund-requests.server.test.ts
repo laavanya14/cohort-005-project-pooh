@@ -387,6 +387,37 @@ describe("the new open refund request notification", () => {
     ]);
   });
 
+  it("goes to whoever is a platform admin when the refund request is raised, not when the purchase was made", async () => {
+    const { purchase, firstAdmin, secondAdmin } = seedPurchaseAndAdmins();
+    const promoted = testDb()
+      .insert(users)
+      .values({
+        name: "Promoted Admin",
+        email: "promoted@example.com",
+        role: UserRole.Student,
+      })
+      .returning()
+      .get();
+    testDb()
+      .update(users)
+      .set({ role: UserRole.PlatformAdmin })
+      .where(eq(users.id, promoted.id))
+      .run();
+    testDb()
+      .update(users)
+      .set({ role: UserRole.Student })
+      .where(eq(users.id, secondAdmin.id))
+      .run();
+
+    createRefundRequest(purchase.id, "Bought it twice.");
+
+    const [notification] = await triggersOf("new-open-refund-request");
+    expect(notification.recipients.map((person) => person.id)).toEqual([
+      String(firstAdmin.id),
+      String(promoted.id),
+    ]);
+  });
+
   it("doesn't go to a platform admin who raises a refund request on their own purchase", async () => {
     const { course, firstAdmin, secondAdmin } = seedPurchaseAndAdmins();
     const adminsPurchase = buyPurchase(firstAdmin.id, course.id);

@@ -1,6 +1,4 @@
 import { Link, useFetcher, redirect } from "react-router";
-import { useEffect } from "react";
-import { toast } from "sonner";
 import { z } from "zod";
 import type { Route } from "./+types/redeem.$code";
 import { getCurrentUserId } from "~/lib/session";
@@ -105,7 +103,7 @@ export async function action({ params, request }: Route.ActionArgs) {
   const result = claimSeat(code, currentUserId, userCountry ?? "");
 
   if (!result.ok) {
-    return data({ error: result.error }, { status: 400 });
+    throw data(result.error, { status: 400 });
   }
 
   const course = getCourseById(result.enrollment.courseId);
@@ -116,22 +114,11 @@ export async function action({ params, request }: Route.ActionArgs) {
   throw redirect(`/courses/${course.slug}/welcome`);
 }
 
-export default function Redeem({
-  loaderData,
-  actionData,
-}: Route.ComponentProps) {
+export default function Redeem({ loaderData }: Route.ComponentProps) {
   const { course, code, alreadyRedeemed, alreadyEnrolled, countryMismatch } =
     loaderData;
   const fetcher = useFetcher();
   const isSubmitting = fetcher.state !== "idle";
-
-  useEffect(() => {
-    const error =
-      fetcher.data?.error ?? (actionData as { error?: string })?.error;
-    if (error) {
-      toast.error(error);
-    }
-  }, [fetcher.data, actionData]);
 
   // Determine which state to show
   const canRedeem = !alreadyRedeemed && !alreadyEnrolled && !countryMismatch;

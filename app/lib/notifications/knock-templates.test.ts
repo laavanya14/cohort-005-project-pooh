@@ -189,6 +189,23 @@ describe("the Knock templates kept in the repo", () => {
     }
   });
 
+  it("keeps one partial for copy that workflows share, not a duplicate per workflow", () => {
+    const partials = readdirSync(partialsDir).filter((entry) =>
+      existsSync(path.join(partialsDir, entry, "partial.json"))
+    );
+    const byCopy = new Map<string, string[]>();
+    for (const partial of partials) {
+      const dir = path.join(partialsDir, partial);
+      const { "content@": file } = readJson<{ "content@": string }>(
+        path.join(dir, "partial.json")
+      );
+      const copy = readFileSync(path.join(dir, file), "utf8").trim();
+      byCopy.set(copy, [...(byCopy.get(copy) ?? []), partial]);
+    }
+
+    expect([...byCopy.values()].filter((keys) => keys.length > 1)).toEqual([]);
+  });
+
   it.each(repoKeys)(
     "writes the %s in-app body as the headline, a blank line, then the detail line",
     (key) => {

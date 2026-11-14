@@ -1,0 +1,7 @@
+{
+  "key": "comment-reply-copy",
+  "name": "A reply to your comment: headline and detail line",
+  "description": "The headline (part: 'headline') and detail line (part: 'detail') every student-reply and instructor-or-platform-admin-reply template shows. Takes name, reply and lesson.",
+  "type": "text",
+  "content@": "content.txt"
+}

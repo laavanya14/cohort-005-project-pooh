@@ -27,6 +27,7 @@ import {
   type NotificationPreferenceRow,
 } from "~/lib/notifications/preferences.server";
 import type { NotificationChannelType } from "~/lib/notifications/transport";
+import { isWorkflowKey } from "~/lib/notifications/notify.server";
 import { Switch } from "~/components/ui/switch";
 import { BrowserPushRow } from "~/components/browser-push-row";
 import { useBrowserPush } from "~/lib/notifications/use-browser-push";
@@ -45,7 +46,7 @@ const settingsSchema = z.discriminatedUnion("intent", [
   }),
   z.object({
     intent: z.literal("set-notification-preference"),
-    workflowKey: z.string().min(1),
+    workflowKey: z.string().refine(isWorkflowKey),
     channel: z.enum(["push", "email"]),
     on: z.enum(["true", "false"]).transform((on) => on === "true"),
   }),
@@ -153,15 +154,12 @@ export async function action({ request }: Route.ActionArgs) {
       );
     } catch (error) {
       if (!(error instanceof Error)) throw error;
-      // Knock couldn't be reached. The switch goes back and says so.
+      // Knock couldn't be reached.
       console.error(
         "[notifications] Couldn't save a notification preference:",
         error
       );
-      return data(
-        { errors: { notifications: COULD_NOT_SAVE_PREFERENCE } },
-        { status: 502 }
-      );
+      throw data(COULD_NOT_SAVE_PREFERENCE, { status: 502 });
     }
     return { notificationPreferenceSaved: true };
   }
@@ -418,12 +416,6 @@ function PreferenceSwitch({
   // While it saves, show the new value; after, the loader's.
   const saving = fetcher.formData?.get("on");
   const checked = typeof saving === "string" ? saving === "true" : on;
-
-  useEffect(() => {
-    if (fetcher.state === "idle" && fetcher.data && "errors" in fetcher.data) {
-      toast.error(COULD_NOT_SAVE_PREFERENCE);
-    }
-  }, [fetcher.state, fetcher.data]);
 
   return (
     <Switch
