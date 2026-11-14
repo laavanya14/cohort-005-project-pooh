@@ -6,6 +6,7 @@ import { Button } from "~/components/ui/button";
 import { Card, CardContent } from "~/components/ui/card";
 import { Textarea } from "~/components/ui/textarea";
 import { UserAvatar } from "~/components/user-avatar";
+import { usePushAsks } from "~/components/push-asks-provider";
 import { cn, formatRelativeTime } from "~/lib/utils";
 import { MAX_COMMENT_LENGTH } from "~/lib/comments";
 
@@ -59,6 +60,7 @@ function CommentForm({
   const fetcher = useFetcher<{ ok?: boolean; error?: string }>();
   const [body, setBody] = useState(defaultValue ?? "");
   const submitting = fetcher.state !== "idle";
+  const pushAsks = usePushAsks();
 
   useEffect(() => {
     if (fetcher.state !== "idle" || !fetcher.data) return;
@@ -69,10 +71,15 @@ function CommentForm({
     }
 
     if (fetcher.data.ok) {
-      if (intent === "create-comment") setBody("");
+      if (intent === "create-comment") {
+        setBody("");
+        // A student hears about replies by push if they turn it on.
+        pushAsks?.askAfter(parentId === undefined ? "comment" : "reply");
+      }
       onDone?.();
     }
-    // onDone is recreated each render by callers; depending on it would loop.
+    // onDone and pushAsks are recreated each render; depending on them would
+    // loop.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetcher.state, fetcher.data, intent]);
 

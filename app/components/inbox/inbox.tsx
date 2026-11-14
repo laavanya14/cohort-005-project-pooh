@@ -15,6 +15,7 @@ import type {
   FeedStoreState,
 } from "@knocklabs/client";
 import type { loader as rootLoader } from "~/root";
+import { usePushAsks } from "~/components/push-asks-provider";
 import {
   INBOX_KINDS,
   toInboxNotification,
@@ -186,6 +187,7 @@ function showError() {
 
 function KnockInbox({ channelId }: { channelId: string }) {
   const navigate = useNavigate();
+  const pushAsks = usePushAsks();
   const [open, setOpen] = useState(false);
   const openNotificationPreferences = useOpenNotificationPreferences(() =>
     setOpen(false)
@@ -315,6 +317,7 @@ function KnockInbox({ channelId }: { channelId: string }) {
           feeds[key].fetchNextPage().catch(showError);
         }}
         onOpenNotificationPreferences={openNotificationPreferences}
+        pushAsk={pushAsks?.inboxCard}
       />
     </>
   );

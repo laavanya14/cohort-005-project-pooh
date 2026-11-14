@@ -4,11 +4,16 @@ import { Sidebar } from "~/components/sidebar";
 import { DevUI } from "~/components/dev-ui";
 import { Inbox } from "~/components/inbox/inbox";
 import { Toaster } from "sonner";
+import { PushAsksProvider } from "~/components/push-asks-provider";
 import {
   getCurrentUserId,
   getDevCountry,
   getPushRegistrationId,
 } from "~/lib/session";
+import { readNotificationConfig } from "~/lib/notifications/config.server";
+import { getNotificationTransport } from "~/lib/notifications/create-transport.server";
+import { listNotificationPreferences } from "~/lib/notifications/preferences.server";
+import { isPushOffForEveryEvent } from "~/lib/notifications/push-ask";
 import { pushClickRedirect } from "~/lib/notifications/push-click.server";
 import { useKeepBrowserPushCurrent } from "~/lib/notifications/use-push-upkeep";
 import { pushRegistrationHere } from "~/lib/push-registrations.server";
@@ -212,6 +217,13 @@ export async function loader({ request }: Route.LoaderArgs) {
       })
     : [];
 
+  const pushRegistration = currentUserId
+    ? pushRegistrationHere({
+        userId: currentUserId,
+        registrationId: await getPushRegistrationId(request),
+      })
+    : null;
+
   return {
     users: users.map((u) => ({ id: u.id, name: u.name, role: u.role })),
     currentUser: currentUser
@@ -228,12 +240,41 @@ export async function loader({ request }: Route.LoaderArgs) {
     countries: COUNTRIES,
     isTeamAdmin: currentUserId ? isTeamAdmin(currentUserId) : false,
     // This browser's push registration for them, refreshed on app load.
-    pushRegistration: currentUserId
-      ? pushRegistrationHere({
-          userId: currentUserId,
-          registrationId: await getPushRegistrationId(request),
+    pushRegistration,
+    pushAsks: currentUserId
+      ? pushAskFacts(currentUserId, {
+          registeredHere: pushRegistration !== null,
         })
       : null,
+  };
+}
+
+/**
+ * What the server knows for the push asks. Whether push is off for every
+ * event comes from Knock, so it's streamed: no page waits on Knock for it.
+ */
+function pushAskFacts(
+  userId: number,
+  { registeredHere }: { registeredHere: boolean }
+) {
+  // Without Knock there are no asks, so there's nothing to read.
+  const needsPreferences =
+    !registeredHere && readNotificationConfig().knock !== null;
+
+  return {
+    registeredHere,
+    pushOffForEveryEvent: needsPreferences
+      ? listNotificationPreferences(getNotificationTransport(), userId)
+          .then(isPushOffForEveryEvent)
+          .catch((error: unknown) => {
+            // The asks still show; the Settings row works either way.
+            console.error(
+              "[notifications] Couldn't read notification preferences:",
+              error
+            );
+            return false;
+          })
+      : Promise.resolve(false),
   };
 }
 
@@ -247,6 +288,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     countries,
     isTeamAdmin: userIsTeamAdmin,
     pushRegistration,
+    pushAsks,
   } = loaderData;
 
   useKeepBrowserPushCurrent({
@@ -254,7 +296,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     registration: pushRegistration,
   });
 
-  return (
+  const page = (
     <div className="flex h-screen overflow-hidden">
       <Sidebar
         currentUser={currentUser}
@@ -274,5 +316,18 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
       />
       <Toaster position="bottom-right" richColors closeButton />
     </div>
+  );
+
+  if (!currentUser || !pushAsks) return page;
+
+  return (
+    <PushAsksProvider
+      userId={currentUser.id}
+      role={currentUser.role}
+      registeredHere={pushAsks.registeredHere}
+      pushOffForEveryEvent={pushAsks.pushOffForEveryEvent}
+    >
+      {page}
+    </PushAsksProvider>
   );
 }
