@@ -3,8 +3,8 @@
 // files under .outbox/, and tests record calls in memory. Whichever is used
 // is always passed in explicitly, never picked up by default.
 //
-// Bulk mark read by a trigger-data key, setPushTokens and preferences get/set
-// join `trigger` and `bulkArchive` here as the tickets that need them land.
+// Bulk mark read by a trigger-data key and setPushTokens join `trigger`,
+// `bulkArchive` and `preferences` here as the tickets that need them land.
 
 /** A person as Knock sees them. `id` is Cadence's user id. */
 export type NotificationRecipient = {
@@ -30,6 +30,18 @@ export type InAppMessageSelector = {
   value: string | number;
 };
 
+/** The channels a person can turn on or off. The inbox is always on. */
+export type NotificationChannelType = "push" | "email";
+
+/**
+ * A person's notification preferences, by workflow key: whether each channel
+ * is on. A channel or workflow left out is on, as Knock treats it.
+ */
+export type NotificationPreferences = Record<
+  string,
+  Partial<Record<NotificationChannelType, boolean>>
+>;
+
 export type NotificationTransport = {
   /**
    * Runs a Knock workflow. `idempotencyKey` is the same on every retry of one
@@ -47,4 +59,15 @@ export type NotificationTransport = {
    * to. Doing it twice is harmless. Rejects when Knock doesn't accept it.
    */
   bulkArchive(selector: InAppMessageSelector): Promise<void>;
+
+  /**
+   * A person's notification preferences, which apply on every device. They
+   * are read and written straight away, not through the outbox, so Settings
+   * shows what Knock holds. Both reject when Knock doesn't answer.
+   */
+  preferences: {
+    get(userId: string): Promise<NotificationPreferences>;
+    /** Changes only the channels in `changes`, leaving the rest as they are. */
+    set(userId: string, changes: NotificationPreferences): Promise<void>;
+  };
 };

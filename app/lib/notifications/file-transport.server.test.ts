@@ -80,4 +80,44 @@ describe("the file-writing notification fake", () => {
       value: 7,
     });
   });
+
+  it("starts each person's notification preferences with every channel on", async () => {
+    const transport = createFileTransport({
+      preferencesDir: path.join(outboxDir(), "notification-preferences"),
+    });
+
+    expect(await transport.preferences.get("12")).toEqual({
+      "refund-request-decided": { push: true, email: true },
+      "instructor-or-platform-admin-reply": { push: true, email: true },
+      "student-top-level-comment": { push: true, email: true },
+      "new-open-refund-request": { push: true },
+    });
+  });
+
+  it("saves a person's notification preferences to <userId>.json, keeping earlier changes", async () => {
+    const preferencesDir = path.join(outboxDir(), "notification-preferences");
+    const transport = createFileTransport({ preferencesDir });
+
+    await transport.preferences.set("12", {
+      "instructor-or-platform-admin-reply": { email: false },
+    });
+    await transport.preferences.set("12", {
+      "refund-request-decided": { push: false },
+    });
+
+    const saved = {
+      "refund-request-decided": { push: false, email: true },
+      "instructor-or-platform-admin-reply": { push: true, email: false },
+      "student-top-level-comment": { push: true, email: true },
+      "new-open-refund-request": { push: true },
+    };
+    expect(readdirSync(preferencesDir)).toEqual(["12.json"]);
+    expect(
+      JSON.parse(readFileSync(path.join(preferencesDir, "12.json"), "utf8"))
+    ).toEqual(saved);
+    expect(await transport.preferences.get("12")).toEqual(saved);
+    expect(
+      await createFileTransport({ preferencesDir }).preferences.get("13")
+    ).toEqual(expect.objectContaining({ "new-open-refund-request": { push: true } }));
+  });
 });

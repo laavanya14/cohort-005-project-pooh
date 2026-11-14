@@ -25,6 +25,7 @@ import {
 import {
   InboxDrawer,
   InboxSidebarItem,
+  NOTIFICATION_PREFERENCES_PATH,
   type InboxTab,
   type InboxTabKey,
 } from "./inbox-drawer";
@@ -89,8 +90,20 @@ function emptyTab(): InboxTab {
 
 function doNothing() {}
 
+/** Closes the drawer and goes to the Notifications section of Settings. */
+function useOpenNotificationPreferences(close: () => void) {
+  const navigate = useNavigate();
+  return () => {
+    close();
+    void navigate(NOTIFICATION_PREFERENCES_PATH);
+  };
+}
+
 function InboxWithoutKnock() {
   const [open, setOpen] = useState(false);
+  const openNotificationPreferences = useOpenNotificationPreferences(() =>
+    setOpen(false)
+  );
 
   return (
     <>
@@ -116,6 +129,7 @@ function InboxWithoutKnock() {
         onArchive={doNothing}
         onUnarchive={doNothing}
         onLoadMore={doNothing}
+        onOpenNotificationPreferences={openNotificationPreferences}
       />
     </>
   );
@@ -173,6 +187,9 @@ function showError() {
 function KnockInbox({ channelId }: { channelId: string }) {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const openNotificationPreferences = useOpenNotificationPreferences(() =>
+    setOpen(false)
+  );
 
   const waitingOnYou = useTabFeed(channelId, "waiting-on-you");
   const aboutYou = useTabFeed(channelId, "about-you");
@@ -297,6 +314,7 @@ function KnockInbox({ channelId }: { channelId: string }) {
         onLoadMore={(key) => {
           feeds[key].fetchNextPage().catch(showError);
         }}
+        onOpenNotificationPreferences={openNotificationPreferences}
       />
     </>
   );

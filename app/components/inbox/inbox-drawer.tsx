@@ -6,6 +6,7 @@ import {
   CheckCheck,
   Inbox as InboxIcon,
   MessageSquare,
+  Settings,
   Sparkles,
   UserRound,
   X,
@@ -20,8 +21,11 @@ import {
 
 // The Inbox drawer, display only: it shows what it's given and reports what
 // the person did through callbacks. It never talks to Knock. The wrapper in
-// `inbox.tsx` connects it to Knock's headless hooks. To add to it (the
-// Settings link, the push-ask card), add a prop here and pass it from there.
+// `inbox.tsx` connects it to Knock's headless hooks. To add to it (such as
+// the push-ask card), add a prop here and pass it from there.
+
+/** The Notifications section of Settings, where the header's gear goes. */
+export const NOTIFICATION_PREFERENCES_PATH = "/settings#notifications";
 
 export type InboxTabKey = InboxKind | "archived";
 
@@ -54,6 +58,8 @@ export type InboxDrawerProps = {
   onArchive: (notification: InboxNotification) => void;
   onUnarchive: (notification: InboxNotification) => void;
   onLoadMore: (tab: InboxTabKey) => void;
+  /** The person followed the header's gear to the Notifications section. */
+  onOpenNotificationPreferences: () => void;
 };
 
 function hasNotifications(tab: InboxTab) {
@@ -328,14 +334,29 @@ export function InboxDrawer(props: InboxDrawerProps) {
           <h2 id="inbox-drawer-title" className="text-lg font-semibold">
             Inbox
           </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close the inbox"
-            className="rounded-md p-1 text-muted-foreground hover:bg-accent"
-          >
-            <X className="size-5" />
-          </button>
+          <div className="flex items-center gap-1">
+            <a
+              href={NOTIFICATION_PREFERENCES_PATH}
+              onClick={(event) => {
+                if (isModifiedClick(event)) return;
+                event.preventDefault();
+                props.onOpenNotificationPreferences();
+              }}
+              aria-label="Notification preferences"
+              title="Notification preferences"
+              className="rounded-md p-1 text-muted-foreground hover:bg-accent"
+            >
+              <Settings className="size-5" />
+            </a>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close the inbox"
+              className="rounded-md p-1 text-muted-foreground hover:bg-accent"
+            >
+              <X className="size-5" />
+            </button>
+          </div>
         </div>
 
         {knockConfigured ? <InboxTabs {...props} now={now} /> : <KnockNotice />}

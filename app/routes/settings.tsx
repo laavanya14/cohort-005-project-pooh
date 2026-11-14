@@ -20,6 +20,14 @@ import {
   listRefundRequestsForStudent,
   withdrawRefundRequest,
 } from "~/lib/refund-requests.server";
+import { getNotificationTransport } from "~/lib/notifications/create-transport.server";
+import {
+  listNotificationPreferences,
+  setNotificationPreference,
+  type NotificationPreferenceRow,
+} from "~/lib/notifications/preferences.server";
+import type { NotificationChannelType } from "~/lib/notifications/transport";
+import { Switch } from "~/components/ui/switch";
 
 const settingsSchema = z.discriminatedUnion("intent", [
   z.object({
@@ -31,7 +39,16 @@ const settingsSchema = z.discriminatedUnion("intent", [
     intent: z.literal("withdraw-refund-request"),
     refundRequestId: z.coerce.number().int(),
   }),
+  z.object({
+    intent: z.literal("set-notification-preference"),
+    workflowKey: z.string().min(1),
+    channel: z.enum(["push", "email"]),
+    on: z.enum(["true", "false"]).transform((on) => on === "true"),
+  }),
 ]);
+
+const COULD_NOT_SAVE_PREFERENCE =
+  "Couldn't save your notification preference. Try again.";
 
 export function meta() {
   return [
@@ -61,6 +78,19 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const refundRequests = listRefundRequestsForStudent(currentUserId);
 
+  // Read from Knock straight away. If Knock can't be reached, the rest of
+  // Settings still works and the Notifications section says so.
+  const notificationPreferences = await listNotificationPreferences(
+    getNotificationTransport(),
+    currentUserId
+  ).catch((error: unknown) => {
+    console.error(
+      "[notifications] Couldn't read notification preferences:",
+      error
+    );
+    return null;
+  });
+
   return {
     user: {
       id: currentUser.id,
@@ -70,6 +100,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       role: currentUser.role,
     },
     refundRequests,
+    notificationPreferences,
   };
 }
 
@@ -101,6 +132,31 @@ export async function action({ request }: Route.ActionArgs) {
     return { withdrawn: true };
   }
 
+  if (parsed.data.intent === "set-notification-preference") {
+    const { workflowKey, channel, on } = parsed.data;
+    try {
+      // Throws a 400 for an email that can't be turned off, or a switch the
+      // person doesn't have.
+      await setNotificationPreference(
+        getNotificationTransport(),
+        currentUser.id,
+        { workflowKey, channel, on }
+      );
+    } catch (error) {
+      if (!(error instanceof Error)) throw error;
+      // Knock couldn't be reached. The switch goes back and says so.
+      console.error(
+        "[notifications] Couldn't save a notification preference:",
+        error
+      );
+      return data(
+        { errors: { notifications: COULD_NOT_SAVE_PREFERENCE } },
+        { status: 502 }
+      );
+    }
+    return { notificationPreferenceSaved: true };
+  }
+
   const { name, bio } = parsed.data;
 
   db
@@ -113,7 +169,7 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function Settings({ loaderData }: Route.ComponentProps) {
-  const { user, refundRequests } = loaderData;
+  const { user, refundRequests, notificationPreferences } = loaderData;
   const fetcher = useFetcher();
   const nameInputRef = useRef<HTMLInputElement>(null);
 
@@ -220,7 +276,134 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
           </CardContent>
         </Card>
       )}
+
+      <NotificationsSection rows={notificationPreferences} />
     </div>
+  );
+}
+
+const CHANNELS: NotificationChannelType[] = ["push", "email"];
+
+const CHANNEL_LABELS: Record<NotificationChannelType, string> = {
+  push: "Push",
+  email: "Email",
+};
+
+/**
+ * Settings → Notifications, where the Inbox drawer's gear links: a Push and
+ * an Email switch for each event the person can receive by push or email.
+ * `rows` is null when Knock couldn't be reached.
+ */
+function NotificationsSection({
+  rows,
+}: {
+  rows: NotificationPreferenceRow[] | null;
+}) {
+  return (
+    <Card id="notifications" className="mt-8 max-w-md scroll-mt-6">
+      <CardHeader>
+        <h2 className="text-lg font-semibold">Notifications</h2>
+        <p className="text-sm text-muted-foreground">
+          Every notification reaches your Inbox. Choose which also come by
+          browser push or email. Your choices apply on every device.
+        </p>
+      </CardHeader>
+      <CardContent>
+        {rows === null ? (
+          <p className="text-sm text-muted-foreground">
+            Couldn't load your notification preferences. Try again later.
+          </p>
+        ) : (
+          <div role="table" aria-label="Notification preferences">
+            <div
+              role="row"
+              className="grid grid-cols-[1fr_4rem_4rem] gap-2 pb-2 text-xs font-medium text-muted-foreground"
+            >
+              <span role="columnheader">Notify me about</span>
+              {CHANNELS.map((channel) => (
+                <span key={channel} role="columnheader" className="text-center">
+                  {CHANNEL_LABELS[channel]}
+                </span>
+              ))}
+            </div>
+            {/* The browser push row for this browser goes here, above the event rows. */}
+            {rows.map((row) => (
+              <NotificationPreferenceLine key={row.workflowKey} row={row} />
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function NotificationPreferenceLine({ row }: { row: NotificationPreferenceRow }) {
+  return (
+    <div
+      role="row"
+      className="grid grid-cols-[1fr_4rem_4rem] items-center gap-2 border-t py-3 text-sm"
+    >
+      <span role="rowheader">{row.label}</span>
+      {CHANNELS.map((channel) => {
+        const on = row.switches[channel];
+        return (
+          <span key={channel} role="cell" className="flex justify-center">
+            {on === undefined ? (
+              // Only an email that can't be turned off has no switch.
+              <span className="text-xs text-muted-foreground">Always</span>
+            ) : (
+              <PreferenceSwitch
+                workflowKey={row.workflowKey}
+                channel={channel}
+                on={on}
+                label={`${row.label}: ${CHANNEL_LABELS[channel]}`}
+              />
+            )}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function PreferenceSwitch({
+  workflowKey,
+  channel,
+  on,
+  label,
+}: {
+  workflowKey: string;
+  channel: NotificationChannelType;
+  on: boolean;
+  label: string;
+}) {
+  const fetcher = useFetcher<typeof action>();
+  // While it saves, show the new value; after, the loader's.
+  const saving = fetcher.formData?.get("on");
+  const checked = typeof saving === "string" ? saving === "true" : on;
+
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data && "errors" in fetcher.data) {
+      toast.error(COULD_NOT_SAVE_PREFERENCE);
+    }
+  }, [fetcher.state, fetcher.data]);
+
+  return (
+    <Switch
+      aria-label={label}
+      checked={checked}
+      onCheckedChange={(next) => {
+        void fetcher.submit(
+          {
+            intent: "set-notification-preference",
+            workflowKey,
+            channel,
+            on: String(next),
+          },
+          { method: "post" }
+        );
+      }}
+    />
   );
 }
 

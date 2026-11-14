@@ -19,3 +19,20 @@ export function createNotificationTransport(
     inAppChannelId: knock.inAppChannelId,
   });
 }
+
+// Kept on globalThis so a dev-server reload reuses it.
+const transportGlobal = globalThis as typeof globalThis & {
+  __cadenceNotificationTransport?: NotificationTransport;
+};
+
+/**
+ * The server process's one Knock-facing interface, for the outbox and for
+ * routes that read or write Knock straight away (notification preferences).
+ * Domain functions take a transport as an argument instead, so tests can
+ * hand in the recording fake.
+ */
+export function getNotificationTransport(): NotificationTransport {
+  transportGlobal.__cadenceNotificationTransport ??=
+    createNotificationTransport();
+  return transportGlobal.__cadenceNotificationTransport;
+}

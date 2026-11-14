@@ -1,11 +1,18 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { NotificationTransport } from "./transport";
+import {
+  defaultNotificationPreferences,
+  mergeNotificationPreferences,
+} from "./preference-defaults";
+import type {
+  NotificationPreferences,
+  NotificationTransport,
+} from "./transport";
 
 // The Knock-facing interface for local dev without KNOCK_SECRET_KEY. It
 // writes what would have been sent to files under .outbox/, so a developer
 // can see it. It doesn't apply preferences or work out channels: that's
-// Knock's job.
+// Knock's job. It does keep each person's preferences, so Settings works.
 
 export const OUTBOX_DIR = ".outbox";
 
@@ -26,7 +33,33 @@ async function writeJson(dir: string, name: string, contents: unknown) {
 export function createFileTransport({
   notificationsDir = path.join(OUTBOX_DIR, "notifications"),
   archivesDir = path.join(OUTBOX_DIR, "bulk-archives"),
-}: { notificationsDir?: string; archivesDir?: string } = {}): NotificationTransport {
+  preferencesDir = path.join(OUTBOX_DIR, "notification-preferences"),
+}: {
+  notificationsDir?: string;
+  archivesDir?: string;
+  preferencesDir?: string;
+} = {}): NotificationTransport {
+  function preferencesFile(userId: string) {
+    return path.join(preferencesDir, `${encodeURIComponent(userId)}.json`);
+  }
+
+  /** The person's saved preferences, or the defaults before their first change. */
+  async function readPreferences(
+    userId: string
+  ): Promise<NotificationPreferences> {
+    try {
+      const saved: NotificationPreferences = JSON.parse(
+        await readFile(preferencesFile(userId), "utf8")
+      );
+      return saved;
+    } catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+        return defaultNotificationPreferences();
+      }
+      throw error;
+    }
+  }
+
   return {
     async trigger(workflowKey, request, { idempotencyKey }) {
       await writeJson(notificationsDir, workflowKey, {
@@ -38,6 +71,22 @@ export function createFileTransport({
 
     async bulkArchive(selector) {
       await writeJson(archivesDir, selector.workflowKey, selector);
+    },
+
+    preferences: {
+      get: readPreferences,
+
+      async set(userId, changes) {
+        const preferences = mergeNotificationPreferences(
+          await readPreferences(userId),
+          changes
+        );
+        await mkdir(preferencesDir, { recursive: true });
+        await writeFile(
+          preferencesFile(userId),
+          `${JSON.stringify(preferences, null, 2)}\n`
+        );
+      },
     },
   };
 }

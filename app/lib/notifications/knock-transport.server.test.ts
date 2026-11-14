@@ -150,3 +150,101 @@ describe("the real Knock adapter", () => {
     ).rejects.toThrow("fetch failed");
   });
 });
+
+describe("the real Knock adapter's notification preferences", () => {
+  function transportAnswering(fetchMock: ReturnType<typeof knockAnswering>) {
+    return createKnockTransport({
+      secretKey: "sk_test_secret",
+      inAppChannelId: "in-app-channel-uuid",
+      fetch: fetchMock,
+    });
+  }
+
+  it("reads the person's workflow-level preferences, push and email per workflow", async () => {
+    const fetchMock = knockAnswering(200, {
+      id: "default",
+      workflows: {
+        "instructor-or-platform-admin-reply": {
+          channel_types: { push: false, email: true, in_app_feed: true },
+        },
+        "new-open-refund-request": false,
+        "student-top-level-comment": true,
+      },
+      categories: {},
+      channel_types: {},
+    });
+
+    const preferences =
+      await transportAnswering(fetchMock).preferences.get("12");
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    expect(String(url)).toBe(
+      "https://api.knock.app/v1/users/12/preferences/default"
+    );
+    expect(init?.method).toBe("GET");
+    expect(new Headers(init?.headers).get("authorization")).toBe(
+      "Bearer sk_test_secret"
+    );
+    // A workflow turned off as a whole has every channel off.
+    expect(preferences).toEqual({
+      "instructor-or-platform-admin-reply": { push: false, email: true },
+      "new-open-refund-request": { push: false, email: false },
+      "student-top-level-comment": { push: true, email: true },
+    });
+  });
+
+  it("reads a channel Knock holds conditions for as on", async () => {
+    const preferences = await transportAnswering(
+      knockAnswering(200, {
+        id: "default",
+        workflows: {
+          "refund-request-decided": {
+            channel_types: { push: { conditions: [] } },
+          },
+        },
+      })
+    ).preferences.get("12");
+
+    expect(preferences).toEqual({ "refund-request-decided": {} });
+  });
+
+  it("reads no preferences for someone Knock doesn't know yet, so everything is on", async () => {
+    const preferences = await transportAnswering(
+      knockAnswering(404, { code: "resource_missing" })
+    ).preferences.get("99");
+
+    expect(preferences).toEqual({});
+  });
+
+  it("merges a change into the person's preferences, leaving the rest alone", async () => {
+    const fetchMock = knockAnswering(200, { id: "default" });
+
+    await transportAnswering(fetchMock).preferences.set("12", {
+      "instructor-or-platform-admin-reply": { email: false },
+    });
+
+    const call = onlyCall(fetchMock);
+    expect(call.method).toBe("PUT");
+    expect(call.url).toBe(
+      "https://api.knock.app/v1/users/12/preferences/default"
+    );
+    expect(call.headers.get("authorization")).toBe("Bearer sk_test_secret");
+    expect(call.body).toEqual({
+      workflows: {
+        "instructor-or-platform-admin-reply": {
+          channel_types: { email: false },
+        },
+      },
+      __persistence_strategy__: "merge",
+    });
+  });
+
+  it("rejects when Knock doesn't accept the change", async () => {
+    await expect(
+      transportAnswering(
+        knockAnswering(500, { message: "Internal error" })
+      ).preferences.set("12", { "refund-request-decided": { push: false } })
+    ).rejects.toThrow(/500.*Internal error/);
+  });
+});

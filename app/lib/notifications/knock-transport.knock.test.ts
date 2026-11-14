@@ -6,7 +6,8 @@ import { createKnockTransport } from "./knock-transport.server";
 
 // Runs only with `npm run test:knock` and Knock *development* keys (in the
 // shell or .env). It sends a real workflow to a test user in Knock's
-// development environment and reads the result back from that user's inbox.
+// development environment and reads the result back from that user's inbox,
+// and saves and reads back that user's notification preferences.
 // Push the templates first: `npx @knocklabs/cli push` (see knock/README.md).
 
 const KNOCK_API = "https://api.knock.app";
@@ -124,6 +125,59 @@ describe.skipIf(!knock)("Knock's development environment", () => {
       ) || undefined
     );
     expect(gone).toBe(true);
+  });
+
+  it("saves a notification preference and reads it back, leaving the others alone", async () => {
+    if (!knock) return;
+    const transport = createKnockTransport(knock);
+    const workflowKey = "instructor-or-platform-admin-reply";
+
+    // The test user exists once the first test above has triggered to them.
+    await transport.preferences.set(testUser.id, {
+      [workflowKey]: { email: false },
+    });
+    await transport.preferences.set(testUser.id, {
+      [workflowKey]: { push: true },
+    });
+
+    const preferences = await transport.preferences.get(testUser.id);
+    // The merge kept the first change while making the second.
+    expect(preferences[workflowKey]).toEqual({ push: true, email: false });
+
+    // The raw preference set, so a change in Knock's shape shows up here.
+    const response = await fetch(
+      `${KNOCK_API}/v1/users/${testUser.id}/preferences/default`,
+      { headers: { Authorization: `Bearer ${knock.secretKey}` } }
+    );
+    expect(response.ok).toBe(true);
+    expect(await response.json()).toMatchObject({
+      workflows: {
+        [workflowKey]: { channel_types: { push: true, email: false } },
+      },
+    });
+
+    // Put it back, so the next run starts from the defaults.
+    await transport.preferences.set(testUser.id, {
+      [workflowKey]: { email: true },
+    });
+    expect((await transport.preferences.get(testUser.id))[workflowKey]).toEqual(
+      { push: true, email: true }
+    );
+  });
+
+  it("reads every channel on for someone Knock doesn't know yet", async () => {
+    if (!knock) return;
+    const transport = createKnockTransport(knock);
+
+    const preferences = await transport.preferences.get(
+      `cadence-test-never-notified-${randomUUID()}`
+    );
+
+    // Nothing at all (Knock answered 404), or the environment defaults.
+    const channelValues = Object.values(preferences).flatMap((channels) =>
+      Object.values(channels)
+    );
+    expect(channelValues.every((on) => on)).toBe(true);
   });
 });
 
