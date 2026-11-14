@@ -12,6 +12,16 @@
         "action_url": "{{ data.path }}",
         "markdown_body@": "in_app_feed_1/markdown_body.md"
       }
+    },
+    {
+      "ref": "push_1",
+      "type": "channel",
+      "channel_key": "fcm",
+      "template": {
+        "settings": { "delivery_type": "content" },
+        "title": "{% render 'new-open-refund-request-copy', part: 'headline', buyer: data.buyerName, course: data.courseTitle, reason: data.reason %}",
+        "text_body": "{% render 'new-open-refund-request-copy', part: 'detail', buyer: data.buyerName, course: data.courseTitle, reason: data.reason %}"
+      }
     }
   ]
 }

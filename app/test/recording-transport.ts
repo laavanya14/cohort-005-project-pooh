@@ -17,7 +17,8 @@ export type RecordedTrigger = TriggerRequest & {
 /** One call Knock accepted, in the order it accepted them. */
 export type RecordedCall =
   | ({ method: "trigger" } & RecordedTrigger)
-  | ({ method: "bulkArchive" } & InAppMessageSelector);
+  | ({ method: "bulkArchive" } & InAppMessageSelector)
+  | { method: "setPushTokens"; userId: string; tokens: string[] };
 
 /** One `preferences.set` call Knock accepted. */
 export type RecordedPreferenceChange = {
@@ -27,8 +28,10 @@ export type RecordedPreferenceChange = {
 
 /**
  * An in-memory stand-in for Knock. It records every trigger it accepts in
- * `triggers`, every bulk archive in `archives`, and both in `calls`, in the
- * order it accepted them. `attempts` holds every trigger it was asked for,
+ * `triggers`, every bulk archive in `archives`, and those and every push
+ * token write in `calls`, in the order it accepted them. `pushTokens` holds
+ * the token list Knock has for each person who has one (writing an empty
+ * list unsets it). `attempts` holds every trigger it was asked for,
  * accepted or not. Each person's preferences start from the defaults, and
  * every change it accepts is in `preferenceChanges`. `failNext()` makes the
  * next calls of any kind fail, as if Knock were down.
@@ -40,6 +43,7 @@ export function createRecordingTransport() {
   const calls: RecordedCall[] = [];
   const preferenceChanges: RecordedPreferenceChange[] = [];
   const preferencesByUser = new Map<string, NotificationPreferences>();
+  const pushTokens = new Map<string, string[]>();
   let failuresLeft = 0;
 
   function knockIsDown() {
@@ -58,6 +62,7 @@ export function createRecordingTransport() {
     archives: InAppMessageSelector[];
     calls: RecordedCall[];
     preferenceChanges: RecordedPreferenceChange[];
+    pushTokens: Map<string, string[]>;
     failNext(times?: number): void;
   } = {
     triggers,
@@ -65,6 +70,7 @@ export function createRecordingTransport() {
     archives,
     calls,
     preferenceChanges,
+    pushTokens,
     failNext(times = 1) {
       failuresLeft = times;
     },
@@ -79,6 +85,12 @@ export function createRecordingTransport() {
       if (knockIsDown()) throw new Error("Knock is unavailable.");
       archives.push({ ...selector });
       calls.push({ method: "bulkArchive", ...selector });
+    },
+    async setPushTokens(userId, tokens) {
+      if (knockIsDown()) throw new Error("Knock is unavailable.");
+      if (tokens.length === 0) pushTokens.delete(userId);
+      else pushTokens.set(userId, [...tokens]);
+      calls.push({ method: "setPushTokens", userId, tokens: [...tokens] });
     },
     preferences: {
       async get(userId) {

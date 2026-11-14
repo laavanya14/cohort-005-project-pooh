@@ -54,4 +54,6 @@ export default [
   route("api/logout", "routes/api.logout.ts"),
   route("api/video-tracking", "routes/api.video-tracking.ts"),
   route("api/set-dev-country", "routes/api.set-dev-country.ts"),
+  route("api/push-registration", "routes/api.push-registration.ts"),
+  route("sw.js", "routes/sw.ts"),
 ] satisfies RouteConfig;

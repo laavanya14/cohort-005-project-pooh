@@ -4,6 +4,8 @@ import { Button } from "~/components/ui/button";
 import { cn } from "~/lib/utils";
 import { UserRole } from "~/db/schema";
 import { userRoleLabels } from "~/lib/user-roles";
+import { forgetBrowserPushToken } from "~/lib/notifications/browser-push";
+import { useBrowserPushConfig } from "~/lib/notifications/use-browser-push";
 import { ChevronDown, ChevronUp, Globe } from "lucide-react";
 
 interface DevUser {
@@ -46,6 +48,7 @@ export function DevUI({ users, currentUser, devCountry, countryTierInfo, countri
   const [minimized, setMinimized] = useState(false);
   const [open, setOpen] = useState(false);
   const location = useLocation();
+  const pushConfig = useBrowserPushConfig();
   if (minimized) {
     return (
       <div className="fixed bottom-4 right-4 z-50">
@@ -115,6 +118,13 @@ export function DevUI({ users, currentUser, devCountry, countryTierInfo, countri
                   key={user.id}
                   method="post"
                   action={`/api/switch-user?redirectTo=${encodeURIComponent(location.pathname + location.search)}`}
+                  onSubmit={() => {
+                    // The server stops push to this browser for the person
+                    // switched away from; this also deletes Firebase's token.
+                    if (pushConfig && currentUser?.id !== user.id) {
+                      void forgetBrowserPushToken(pushConfig);
+                    }
+                  }}
                 >
                   <input type="hidden" name="userId" value={user.id} />
                   <button

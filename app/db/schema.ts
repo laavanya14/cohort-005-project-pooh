@@ -398,3 +398,24 @@ export const notificationJobs = sqliteTable(
   },
   (table) => [index("notification_jobs_next_run_idx").on(table.nextRunAt)]
 );
+
+// The browsers each person turned on push in: one row per browser, holding
+// its Firebase token. It's the source of truth for the tokens Knock holds
+// (docs/adr/0014): every change rewrites the person's whole list in Knock.
+// See app/lib/push-registrations.server.ts.
+export const pushRegistrations = sqliteTable(
+  "push_registrations",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    // Firebase's token for this browser. One browser, one token.
+    token: text("token").notNull().unique(),
+    // A short name for the browser, such as "Chrome on macOS".
+    browserLabel: text("browser_label").notNull(),
+    createdAt: text("created_at").notNull(),
+    lastSeenAt: text("last_seen_at").notNull(),
+  },
+  (table) => [index("push_registrations_user_idx").on(table.userId)]
+);

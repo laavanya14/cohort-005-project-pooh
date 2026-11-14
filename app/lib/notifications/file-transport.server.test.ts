@@ -57,6 +57,22 @@ describe("the file-writing notification fake", () => {
     });
   });
 
+  it("keeps each person's whole push token list in one file, and removes it when the list is empty", async () => {
+    const pushTokensDir = path.join(outboxDir(), "push-tokens");
+    const transport = createFileTransport({ pushTokensDir });
+
+    await transport.setPushTokens("7", ["laptop-token"]);
+    await transport.setPushTokens("7", ["laptop-token", "phone-token"]);
+
+    expect(readdirSync(pushTokensDir)).toEqual(["7.json"]);
+    expect(
+      JSON.parse(readFileSync(path.join(pushTokensDir, "7.json"), "utf8"))
+    ).toEqual({ tokens: ["laptop-token", "phone-token"] });
+
+    await transport.setPushTokens("7", []);
+    expect(readdirSync(pushTokensDir)).toEqual([]);
+  });
+
   it("writes one JSON file per bulk archive, named by time and workflow key", async () => {
     const archivesDir = path.join(outboxDir(), "bulk-archives");
     const transport = createFileTransport({ archivesDir });

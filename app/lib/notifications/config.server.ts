@@ -9,6 +9,17 @@
 const KNOCK_SETTINGS = {
   publicKey: { env: "KNOCK_PUBLIC_KEY", public: true },
   inAppChannelId: { env: "KNOCK_IN_APP_CHANNEL_ID", public: true },
+  fcmChannelId: { env: "KNOCK_FCM_CHANNEL_ID", public: false },
+  // Browser push: the Firebase web app's config and its VAPID public key.
+  // None are secret; the browser and /sw.js need them.
+  firebaseApiKey: { env: "FIREBASE_API_KEY", public: true },
+  firebaseProjectId: { env: "FIREBASE_PROJECT_ID", public: true },
+  firebaseMessagingSenderId: {
+    env: "FIREBASE_MESSAGING_SENDER_ID",
+    public: true,
+  },
+  firebaseAppId: { env: "FIREBASE_APP_ID", public: true },
+  firebaseVapidKey: { env: "FIREBASE_VAPID_KEY", public: true },
 } as const satisfies Record<string, { env: string; public: boolean }>;
 
 type KnockSettingName = keyof typeof KNOCK_SETTINGS;

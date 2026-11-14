@@ -17,7 +17,23 @@ export type NotificationJob =
   | {
       type: "bulkArchive";
       selector: InAppMessageSelector;
+    }
+  | {
+      /**
+       * Writes the person's whole list of push tokens to Knock. The list is
+       * read from the push registrations table when the job is sent, not
+       * when it's saved, so one waiting job covers every change before it:
+       * the outbox keeps at most one waiting per person.
+       */
+      type: "setPushTokens";
+      userId: number;
     };
+
+/** What a job reads from Cadence's database when it is sent. */
+export type JobSources = {
+  /** The person's push tokens, as the push registrations table has them now. */
+  pushTokensOf(userId: number): string[];
+};
 
 /** A short description of the job for the server log. */
 export function describeJob(job: NotificationJob) {
@@ -26,6 +42,8 @@ export function describeJob(job: NotificationJob) {
       return `the ${job.workflowKey} trigger`;
     case "bulkArchive":
       return `the bulk archive of ${job.selector.workflowKey} by ${job.selector.key} ${job.selector.value}`;
+    case "setPushTokens":
+      return `the push tokens of person ${job.userId}`;
   }
 }
 
@@ -33,7 +51,8 @@ export function describeJob(job: NotificationJob) {
 export function performJob(
   transport: NotificationTransport,
   job: NotificationJob,
-  idempotencyKey: string
+  idempotencyKey: string,
+  sources: JobSources
 ): Promise<void> {
   switch (job.type) {
     case "trigger":
@@ -42,5 +61,10 @@ export function performJob(
       });
     case "bulkArchive":
       return transport.bulkArchive(job.selector);
+    case "setPushTokens":
+      return transport.setPushTokens(
+        String(job.userId),
+        sources.pushTokensOf(job.userId)
+      );
   }
 }

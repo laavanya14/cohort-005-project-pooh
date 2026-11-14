@@ -14,6 +14,16 @@
       }
     },
     {
+      "ref": "push_1",
+      "type": "channel",
+      "channel_key": "fcm",
+      "template": {
+        "settings": { "delivery_type": "content" },
+        "title": "{% render 'instructor-or-platform-admin-reply-copy', part: 'headline', name: data.commenterName, reply: data.commentText, lesson: data.lessonTitle %}",
+        "text_body": "{% render 'instructor-or-platform-admin-reply-copy', part: 'detail', name: data.commenterName, reply: data.commentText, lesson: data.lessonTitle %}"
+      }
+    },
+    {
       "ref": "email_1",
       "type": "channel",
       "channel_key": "postmark",

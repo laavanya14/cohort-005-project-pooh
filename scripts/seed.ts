@@ -65,6 +65,7 @@ async function seed() {
 
   // Drop and recreate tables for a clean seed
   sqlite.exec(`
+    DROP TABLE IF EXISTS push_registrations;
     DROP TABLE IF EXISTS notification_jobs;
     DROP TABLE IF EXISTS comments;
     DROP TABLE IF EXISTS course_ratings;
@@ -2375,6 +2376,32 @@ This course is still in draft while the cluster examples are rewritten against t
     `Created ${countRows(schema.notificationJobs)} notification outbox jobs.`
   );
 
+  // ─── Push registrations ───
+  // The admin turned on browser push on two browsers. The tokens are made up,
+  // so they only work against the local fake. No session holds these, so the
+  // Settings row in your own browser still starts at Off.
+
+  db.insert(schema.pushRegistrations)
+    .values([
+      {
+        userId: admin.id,
+        token: "seed-token-admin-chrome-macos",
+        browserLabel: "Chrome on macOS",
+        createdAt: daysAgo(20),
+        lastSeenAt: daysAgo(1),
+      },
+      {
+        userId: admin.id,
+        token: "seed-token-admin-safari-ios",
+        browserLabel: "Safari on iOS",
+        createdAt: daysAgo(12),
+        lastSeenAt: daysAgo(3),
+      },
+    ])
+    .run();
+
+  console.log(`Created ${countRows(schema.pushRegistrations)} push registrations.`);
+
   // ─── Teams, Team Members, and Coupons ───
   // Bossy McBossface bought 5 team seats for course 2; Olivia and Liam redeemed coupons
 
@@ -2877,6 +2904,7 @@ This course is still in draft while the cluster examples are rewritten against t
   console.log(
     `  Notification outbox jobs: ${countRows(schema.notificationJobs)} (${countRows(schema.notificationJobs, isNotNull(schema.notificationJobs.failedAt))} failed)`
   );
+  console.log(`  Push registrations: ${countRows(schema.pushRegistrations)}`);
   console.log(
     `  Teams: ${countRows(schema.teams)}, coupons: ${countRows(schema.coupons)} (${countRows(schema.coupons, isNotNull(schema.coupons.redeemedByUserId))} redeemed)`
   );

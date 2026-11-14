@@ -453,7 +453,11 @@ describe("archiving every platform admin's new open refund request", () => {
         now: new Date(start.getTime() + 2 * 60 * 1000),
       });
       const aboutThisRequest = knock.calls
-        .filter((call) => call.workflowKey === "new-open-refund-request")
+        .filter(
+          (call) =>
+            "workflowKey" in call &&
+            call.workflowKey === "new-open-refund-request"
+        )
         .map((call) => call.method);
       expect(aboutThisRequest).toEqual(["trigger", "bulkArchive"]);
     }
